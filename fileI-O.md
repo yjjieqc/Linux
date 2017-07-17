@@ -78,6 +78,7 @@
 
 ### 1.5.1 阻塞读终端
 
+<pre>
 	#include <unistd.h>
 	#include <stdlib.h>
 	int main(void)
@@ -92,6 +93,7 @@
 	write(STDOUT_FILENO, buf, n);
 	return 0;
  }
+<code>
 
 ### 1.5.2  非阻塞读终端
 	轮寻模式
