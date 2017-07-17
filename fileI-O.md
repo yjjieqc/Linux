@@ -128,11 +128,21 @@ fseek函数在底层调用lseek实现。
  int fsetpos(FILE *stream, const fpos_t *pos);
 
 # 1.7 fcntl
+
 获取和设置文件访问属性
+<pre>
  #include <unistd.h>
  #include <fcntl.h>
 
  int fcntl(int fd, int cmd, ... /* arg */ );
+ int fcntl(int fd, int cmd);
+ int fcntl(int fd, int cmd, long arg);
+ int fcntl(int fd, int cmd, struct flock *lock);
+<code>
+
+# 1.8 ioctl
+
+ioctl用于向设备发控制和配置命令，有些命令也需要读写一些数据，但是这些数据是不能用read/write读写的，称为Out-of-Band数据。也就是说，read/write读写数据是in-band数据，是I/O操作的主体。
 
 
 
