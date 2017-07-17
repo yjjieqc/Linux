@@ -5,7 +5,7 @@
 	定义位置：/usr/src/linux-headers/include/linux/sched.h
 
 ### 1.2.2 files_struct结构体
-	
+
 	相当于一张表，或者指针，文件描述符表
 	FILE *		fopen("abc")
 
@@ -23,7 +23,7 @@
 	#include <sys/types.h>
 	#include <sys/stat.h>
 	#include <fcntl.h>
-	
+
 	最后的可变参数可以是0个或1个,由flags参数中的标志位决定,见下面的详细说明。
 	pathname参数是要打开或创建的文件名,和fopen一样,pathname既可以是相对路径也可以是绝对路径。flags参数有一系列常数值可供选择,可以同时选择多个常数用按位或运算符连接起来,所以这些常数的宏定义都以O_开头,表示or。
 必选项:以下三个常数中必须指定一个,且仅允许指定一个。
@@ -42,7 +42,7 @@
 		以三个参数mode指定文件权限，可以用八进制数表示，比如0644表示-rw-r--r--,也可以用S_IRUSR、S_IWUSR等宏定义按位或起来表示。要注意的是，文件权限由open的mode参数和当前进程的umask共同决定。
 
 	close函数
-	
+
 	最大文件打开个数
 	默认一个进程最多可以打开1024个文件，可以使用
 	cat /proc/sys/fs/file-max
@@ -78,7 +78,7 @@
 
 ### 1.5.1 阻塞读终端
 
-<pre>
+
 	#include <unistd.h>
 	#include <stdlib.h>
 	int main(void)
@@ -92,8 +92,7 @@
 	}
 	write(STDOUT_FILENO, buf, n);
 	return 0;
- }
-<code>
+}
 
 ### 1.5.2  非阻塞读终端
 	轮寻模式
@@ -109,7 +108,7 @@ fseek函数在底层调用lseek实现。
 
  #include <sys/types.h>
  #include <unistd.h>
- 
+
  off_t lseek(int fd, off_t offset, int whence);
 
 额外功能：
@@ -119,13 +118,13 @@ fseek函数在底层调用lseek实现。
 ### fseek函数
 
  #include <stdio.h>
- 
+
  int fseek(FILE *stream, long offset, int whence);
- 
+
  long ftell(FILE *stream);
- 
+
  void rewind(FILE *stream);
- 
+
  int fgetpos(FILE *stream, fpos_t *pos);
  int fsetpos(FILE *stream, const fpos_t *pos);
 
@@ -142,7 +141,7 @@ fseek函数在底层调用lseek实现。
  int fcntl(int fd, int cmd, struct flock *lock);
 <code>
 
-# 1.8 ioctl
+## 1.8 ioctl
 
 ioctl用于向设备发控制和配置命令，有些命令也需要读写一些数据，但是这些数据是不能用read/write读写的，称为Out-of-Band数据。也就是说，read/write读写数据是in-band数据，是I/O操作的主体。
 
@@ -158,9 +157,9 @@ ioctl用于向设备发控制和配置命令，有些命令也需要读写一些
 
 
 
-# 15  错误处理机制
+# 15  错误处理机制 #
 
-## errno
+## errno  ##
 
  #define	EPERM		 1	/* Operation not permitted */
  #define	ENOENT		 2	/* No such file or directory */
@@ -197,7 +196,7 @@ ioctl用于向设备发控制和配置命令，有些命令也需要读写一些
  #define	EDOM		33	/* Math argument out of domain of func */
  #define	ERANGE		34	/* Math result not representable */
 
-## perror
+## perror ##
 
  #include <stdio.h>
  void perror(const char *s);
