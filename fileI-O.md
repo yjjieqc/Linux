@@ -27,15 +27,15 @@
 	最后的可变参数可以是0个或1个,由flags参数中的标志位决定,见下面的详细说明。
 	pathname参数是要打开或创建的文件名,和fopen一样,pathname既可以是相对路径也可以是绝对路径。flags参数有一系列常数值可供选择,可以同时选择多个常数用按位或运算符连接起来,所以这些常数的宏定义都以O_开头,表示or。
 必选项:以下三个常数中必须指定一个,且仅允许指定一个。
-* O_RDONLY 只读打开
-* O_WRONLY 只写打开
-* O_RDWR 可读可写打开
+ * O_RDONLY 只读打开
+ * O_WRONLY 只写打开
+ * O_RDWR 可读可写打开
 以下可选项可以同时指定0个或多个,和必选项按位或起来作为flags参数。可选项有很多,这里只介绍一部分,其它选项可参考open(2)的Man Page:
-* O_APPEND 表示追加。如果文件已有内容,这次打开文件所写的数据附加到文件的末尾而不覆盖原来的内容。
-* O_CREAT 若此文件不存在则创建它。使用此选项时需要提供第三个参数mode,表示该文件的访问权限。
-* O_EXCL 如果同时指定了O_CREAT,并且文件已存在,则出错返回。
-* O_TRUNC 如果文件已存在,并且以只写或可读可写方式打开,则将其长度截断(Trun-cate)为0字节。
-* O_NONBLOCK 对于设备文件,以O_NONBLOCK方式打开可以做非阻塞I/O(Nonblock I/O),非阻塞I/O在下一节详细讲解。
+ * O_APPEND 表示追加。如果文件已有内容,这次打开文件所写的数据附加到文件的末尾而不覆盖原来的内容。
+ * O_CREAT 若此文件不存在则创建它。使用此选项时需要提供第三个参数mode,表示该文件的访问权限。
+ * O_EXCL 如果同时指定了O_CREAT,并且文件已存在,则出错返回。
+ * O_TRUNC 如果文件已存在,并且以只写或可读可写方式打开,则将其长度截断(Trun-cate)为0字节。
+ * O_NONBLOCK 对于设备文件,以O_NONBLOCK方式打开可以做非阻塞I/O(Nonblock I/O),非阻塞I/O在下一节详细讲解。
 	open函数和C标准I/O库的fopen函数细微区别在于：
 		以可写方式fopen一个文件时，如果文件不存在则会自动创建，而open一个文件时必须使用O_CREAT才会创建文件，否则文件不存在就出错返回。
 		以w或者w+方式fopen一个文件时，如果文件存在就截断为0字节，而open一个文件必须明确指定O_TRUNC才会截断文件，否则在原来的数据上改写。
@@ -91,7 +91,7 @@
 	}
 	write(STDOUT_FILENO, buf, n);
 	return 0;
-}
+ }
 
 ### 1.5.2  非阻塞读终端
 	轮寻模式
@@ -105,10 +105,10 @@ fseek函数在底层调用lseek实现。
 
 ### lseek
 
-#include <sys/types.h>
-#include <unistd.h>
-
-off_t lseek(int fd, off_t offset, int whence);
+ #include <sys/types.h>
+ #include <unistd.h>
+ 
+ off_t lseek(int fd, off_t offset, int whence);
 
 额外功能：
 1、拓展一个文件，一定要有一次写操作
@@ -116,16 +116,16 @@ off_t lseek(int fd, off_t offset, int whence);
 
 ### fseek函数
 
-#include <stdio.h>
-
-int fseek(FILE *stream, long offset, int whence);
-
-long ftell(FILE *stream);
-
-void rewind(FILE *stream);
-
-int fgetpos(FILE *stream, fpos_t *pos);
-int fsetpos(FILE *stream, const fpos_t *pos);
+ #include <stdio.h>
+ 
+ int fseek(FILE *stream, long offset, int whence);
+ 
+ long ftell(FILE *stream);
+ 
+ void rewind(FILE *stream);
+ 
+ int fgetpos(FILE *stream, fpos_t *pos);
+ int fsetpos(FILE *stream, const fpos_t *pos);
 
 # 1.7 fcntl
 获取和设置文件访问属性
@@ -150,59 +150,59 @@ int fsetpos(FILE *stream, const fpos_t *pos);
 
 ## errno
 
-#define	EPERM		 1	/* Operation not permitted */
-#define	ENOENT		 2	/* No such file or directory */
-#define	ESRCH		 3	/* No such process */
-#define	EINTR		 4	/* Interrupted system call */
-#define	EIO		 5	/* I/O error */
-#define	ENXIO		 6	/* No such device or address */
-#define	E2BIG		 7	/* Argument list too long */
-#define	ENOEXEC		 8	/* Exec format error */
-#define	EBADF		 9	/* Bad file number */
-#define	ECHILD		10	/* No child processes */
-#define	EAGAIN		11	/* Try again */
-#define	ENOMEM		12	/* Out of memory */
-#define	EACCES		13	/* Permission denied */
-#define	EFAULT		14	/* Bad address */
-#define	ENOTBLK		15	/* Block device required */
-#define	EBUSY		16	/* Device or resource busy */
-#define	EEXIST		17	/* File exists */
-#define	EXDEV		18	/* Cross-device link */
-#define	ENODEV		19	/* No such device */
-#define	ENOTDIR		20	/* Not a directory */
-#define	EISDIR		21	/* Is a directory */
-#define	EINVAL		22	/* Invalid argument */
-#define	ENFILE		23	/* File table overflow */
-#define	EMFILE		24	/* Too many open files */
-#define	ENOTTY		25	/* Not a typewriter */
-#define	ETXTBSY		26	/* Text file busy */
-#define	EFBIG		27	/* File too large */
-#define	ENOSPC		28	/* No space left on device */
-#define	ESPIPE		29	/* Illegal seek */
-#define	EROFS		30	/* Read-only file system */
-#define	EMLINK		31	/* Too many links */
-#define	EPIPE		32	/* Broken pipe */
-#define	EDOM		33	/* Math argument out of domain of func */
-#define	ERANGE		34	/* Math result not representable */
+ #define	EPERM		 1	/* Operation not permitted */
+ #define	ENOENT		 2	/* No such file or directory */
+ #define	ESRCH		 3	/* No such process */
+ #define	EINTR		 4	/* Interrupted system call */
+ #define	EIO		 5	/* I/O error */
+ #define	ENXIO		 6	/* No such device or address */
+ #define	E2BIG		 7	/* Argument list too long */
+ #define	ENOEXEC		 8	/* Exec format error */
+ #define	EBADF		 9	/* Bad file number */
+ #define	ECHILD		10	/* No child processes */
+ #define	EAGAIN		11	/* Try again */
+ #define	ENOMEM		12	/* Out of memory */
+ #define	EACCES		13	/* Permission denied */
+ #define	EFAULT		14	/* Bad address */
+ #define	ENOTBLK		15	/* Block device required */
+ #define	EBUSY		16	/* Device or resource busy */
+ #define	EEXIST		17	/* File exists */
+ #define	EXDEV		18	/* Cross-device link */
+ #define	ENODEV		19	/* No such device */
+ #define	ENOTDIR		20	/* Not a directory */
+ #define	EISDIR		21	/* Is a directory */
+ #define	EINVAL		22	/* Invalid argument */
+ #define	ENFILE		23	/* File table overflow */
+ #define	EMFILE		24	/* Too many open files */
+ #define	ENOTTY		25	/* Not a typewriter */
+ #define	ETXTBSY		26	/* Text file busy */
+ #define	EFBIG		27	/* File too large */
+ #define	ENOSPC		28	/* No space left on device */
+ #define	ESPIPE		29	/* Illegal seek */
+ #define	EROFS		30	/* Read-only file system */
+ #define	EMLINK		31	/* Too many links */
+ #define	EPIPE		32	/* Broken pipe */
+ #define	EDOM		33	/* Math argument out of domain of func */
+ #define	ERANGE		34	/* Math result not representable */
 
 ## perror
 
-#include <stdio.h>
-void perror(const char *s);
-#include <errno.h>
-const char *sys_errlist[];
-int sys_nerr;
-int errno;
+ #include <stdio.h>
+ void perror(const char *s);
+ #include <errno.h>
+ const char *sys_errlist[];
+ int sys_nerr;
+ int errno;
 
 ## strerror
-#include <string.h>
-
-char **strerror(int errnum);
-
-int strerror_r(int errnum, char *buf, size_t buflen);
-/* XSI-compliant */
-char *strerror_r(int errnum, char *buf, size_t buflen);
-/* GNU-specific */
+ #include <string.h>
+ 
+ char **strerror(int errnum);
+ 
+ int strerror_r(int errnum, char *buf, size_t buflen);
+ /* XSI-compliant */
+ char *strerror_r(int errnum, char *buf, size_t buflen);
+ /* GNU-specific */
 
 
 
