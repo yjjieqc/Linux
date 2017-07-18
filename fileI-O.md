@@ -19,7 +19,7 @@
 	STDERR_FILENO 2
 
 	open函数可以打开或者创建一个文件
-使用open函数，需要包含以下三个头文件
+    使用open函数，需要包含以下三个头文件
 	#include <sys/types.h>
 	#include <sys/stat.h>
 	#include <fcntl.h>
@@ -30,7 +30,7 @@
  * O_RDONLY 只读打开
  * O_WRONLY 只写打开
  * O_RDWR 可读可写打开
-以下可选项可以同时指定0个或多个,和必选项按位或起来作为flags参数。可选项有很多,这里只介绍一部分,其它选项可参考open(2)的Man Page:
+    以下可选项可以同时指定0个或多个,和必选项按位或起来作为flags参数。可选项有很多,这里只介绍一部分,其它选项可参考open(2)的Man Page:
  * O_APPEND 表示追加。如果文件已有内容,这次打开文件所写的数据附加到文件的末尾而不覆盖原来的内容。
  * O_CREAT 若此文件不存在则创建它。使用此选项时需要提供第三个参数mode,表示该文件的访问权限。
  * O_EXCL 如果同时指定了O_CREAT,并且文件已存在,则出错返回。
@@ -87,12 +87,12 @@
 	int n;
 	n = read(STDIN_FILENO, buf, 10);
 	if (n < 0) {
-	perror("read STDIN_FILENO");
-	exit(1);
+	   perror("read STDIN_FILENO");
+	   exit(1);
 	}
 	write(STDOUT_FILENO, buf, n);
 	return 0;
-}
+	}
 
 ### 1.5.2  非阻塞读终端
 	轮寻模式
@@ -101,8 +101,8 @@
 
 ## 1.6  lseek
 
-类似于标准I/O库的fseek函数类似，可以移动当前读写位置，但有一个例外，如果文件以O_APEND模式打开，每次写操作都会在文件末尾追加数据，然后讲读写位置移动到新的文件末尾。
-fseek函数在底层调用lseek实现。
+类似于标准I/O库的`fseek`函数类似，可以移动当前读写位置，但有一个例外，如果文件以O_APEND模式打开，每次写操作都会在文件末尾追加数据，然后讲读写位置移动到新的文件末尾。
+`fseek`函数在底层调用`lseek`实现。
 
 ### lseek
 
@@ -143,8 +143,10 @@ fseek函数在底层调用lseek实现。
 
 ## 1.8 ioctl
 
-ioctl用于向设备发控制和配置命令，有些命令也需要读写一些数据，但是这些数据是不能用read/write读写的，称为Out-of-Band数据。也就是说，read/write读写数据是in-band数据，是I/O操作的主体。
+ioctl用于向设备发控制和配置命令，有些命令也需要读写一些数据，但是这些数据是不能用read/write读写的，称为Out-of-Band数据。也就是说，read/write读写数据是in-band数据，是I/O操作的主体。而ioctl命令传送的是控制信息，其中的数据是辅助的数据。例如，在串口线上收发数据童工read/write操作，而串口的波特率、校验位、停止位通过ioctl设置，A/D转换的结果通过read图区，而A/D转换的精度和工作频率通过ioctl设置。
 
+![ioctl工作模式](./figures/file-io/ioctl.png)
+ioctl 工作模式
 
 
 
@@ -196,6 +198,7 @@ ioctl用于向设备发控制和配置命令，有些命令也需要读写一些
  #define	EDOM		33	/* Math argument out of domain of func */
  #define	ERANGE		34	/* Math result not representable */
 
+![error](./figures/file-io/errno.png)
 ## perror ##
 
  #include <stdio.h>
