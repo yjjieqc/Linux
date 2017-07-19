@@ -130,16 +130,16 @@
 
 # 1.7 fcntl
 
-获取和设置文件访问属性
-<pre>
- #include <unistd.h>
- #include <fcntl.h>
-
- int fcntl(int fd, int cmd, ... /* arg */ );
- int fcntl(int fd, int cmd);
- int fcntl(int fd, int cmd, long arg);
- int fcntl(int fd, int cmd, struct flock *lock);
-<code>
+    获取和设置文件访问属性
+```
+    #include <unistd.h>
+    #include <fcntl.h>
+    
+    int fcntl(int fd, int cmd, ... /* arg */ );
+    int fcntl(int fd, int cmd);
+    int fcntl(int fd, int cmd, long arg);
+    int fcntl(int fd, int cmd, struct flock *lock);
+```
 
 参数  |作用
 :-----：|：------：
@@ -152,13 +152,13 @@ __F_SETFL__ | 设置文件状态标志
 
 ioctl用于向设备发控制和配置命令，有些命令也需要读写一些数据，但是这些数据是不能用read/write读写的，称为Out-of-Band数据。也就是说，read/write读写数据是in-band数据，是I/O操作的主体。而ioctl命令传送的是控制信息，其中的数据是辅助的数据。例如，在串口线上收发数据童工read/write操作，而串口的波特率、校验位、停止位通过ioctl设置，A/D转换的结果通过read图区，而A/D转换的精度和工作频率通过ioctl设置。
 
-![ioctl工作模式](./figures/file-io/ioctl.png)
+![ioctl工作模式](./figures/3-file-io/ioctl.png)
 ioctl 工作模式
-<pre>
-#inlcude <sys/ioctl.h>
-
-int ioctl(int d, int request, ...);
-
+```
+    #inlcude <sys/ioctl.h>
+    
+    int ioctl(int d, int request, ...);
+```
     d是某个设备文件描述符。request是ioctl命令，可变参数取决于request。
 
 注意:open命令创建文件呢权限不能超过执行用户的自有权限
@@ -385,87 +385,3 @@ inode表占多少个块在格式化时就要决定并写入块组描述符中,mk
                                                       by all filesystem types */
                        char           d_name[256]; /* filename */
                    };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# 15  错误处理机制 #
-
-## errno  ##
-
- #define	EPERM		 1	/* Operation not permitted */
- #define	ENOENT		 2	/* No such file or directory */
- #define	ESRCH		 3	/* No such process */
- #define	EINTR		 4	/* Interrupted system call */
- #define	EIO		 5	/* I/O error */
- #define	ENXIO		 6	/* No such device or address */
- #define	E2BIG		 7	/* Argument list too long */
- #define	ENOEXEC		 8	/* Exec format error */
- #define	EBADF		 9	/* Bad file number */
- #define	ECHILD		10	/* No child processes */
- #define	EAGAIN		11	/* Try again */
- #define	ENOMEM		12	/* Out of memory */
- #define	EACCES		13	/* Permission denied */
- #define	EFAULT		14	/* Bad address */
- #define	ENOTBLK		15	/* Block device required */
- #define	EBUSY		16	/* Device or resource busy */
- #define	EEXIST		17	/* File exists */
- #define	EXDEV		18	/* Cross-device link */
- #define	ENODEV		19	/* No such device */
- #define	ENOTDIR		20	/* Not a directory */
- #define	EISDIR		21	/* Is a directory */
- #define	EINVAL		22	/* Invalid argument */
- #define	ENFILE		23	/* File table overflow */
- #define	EMFILE		24	/* Too many open files */
- #define	ENOTTY		25	/* Not a typewriter */
- #define	ETXTBSY		26	/* Text file busy */
- #define	EFBIG		27	/* File too large */
- #define	ENOSPC		28	/* No space left on device */
- #define	ESPIPE		29	/* Illegal seek */
- #define	EROFS		30	/* Read-only file system */
- #define	EMLINK		31	/* Too many links */
- #define	EPIPE		32	/* Broken pipe */
- #define	EDOM		33	/* Math argument out of domain of func */
- #define	ERANGE		34	/* Math result not representable */
-
-![error](./figures/file-io/errno.png)
-## perror ##
-
- #include <stdio.h>
- void perror(const char *s);
- #include <errno.h>
- const char *sys_errlist[];
- int sys_nerr;
- int errno;
-
-## strerror
- #include <string.h>
- 
- char **strerror(int errnum);
- 
- int strerror_r(int errnum, char *buf, size_t buflen);
- /* XSI-compliant */
- char *strerror_r(int errnum, char *buf, size_t buflen);
- /* GNU-specific */
-
-
-
