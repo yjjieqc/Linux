@@ -37,7 +37,7 @@
  #define	EDOM		33	/* Math argument out of domain of func */
  #define	ERANGE		34	/* Math result not representable */
 
-![error](./figures/file-io/errno.png)
+![error](./figures/3-file-io/errno.png)
 ## perror ##
 
  #include <stdio.h>
