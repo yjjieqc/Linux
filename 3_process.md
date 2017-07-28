@@ -207,7 +207,7 @@ HOME
                            char *const envp[]);
 
         这些函数如果调用成功则加载新的程序从启动代码开始执行，不再返回，如果调用出错则返回-1，所以exec函数只有出错的返回值而没有成功的返回值。
-        这些函数原型看起来很容易混，但只要掌握了规律就很好记。不带字母**p**（表示path）的exec函数第一个参数必须是程序的相对路径或绝对路径，例如“/bin/ls”或“./a.out”，而不能是“ls”或“a.out”。对于带字母p的函数：
+        这些函数原型看起来很容易混，但只要掌握了规律就很好记。不带字母p（表示path）的exec函数第一个参数必须是程序的相对路径或绝对路径，例如“/bin/ls”或“./a.out”，而不能是“ls”或“a.out”。对于带字母p的函数：
         如果参数中包含/，则将其视为路径名。
         否则视为不带路径的程序名，在PATH环境变量的目录列表中搜索这个程序。
         带有字母l（表示list）的exec函数要求将新程序的每个命令行参数都当作一个参数传给它，命令行参数的个数是可变的，因此函数原型中有…，…中的最后一个可变参数应该是NULL，起sentinel的作用。对于带有字母v（表示vector）的函数，则应该先构造一个指向各参数的指针数组，然后将该数组的首地址当作参数传给它，数组中的最后一个指针也应该是NULL，就像main函数的argv参数或者环境变量表一样。
@@ -223,3 +223,144 @@ HOME
         execlp("ps", "ps", "-o", "pid,ppid,pgrp,session,tpgid,comm", NULL);
         execvp("ps", ps_argv);
 
+        事实上，只有execve()是真正的系统调用，其它五个函数最终都调用execve()，所以execve()在man手册第2节，其它函数在man手册第3节。这些函数之间的关系如下图所示。
+
+        一个完整的例子：
+        #include <unistd.h>
+        #include <stdlib.h>
+        int main(void)
+        {
+        execlp("ps", "ps", "-o", "pid,ppid,pgrp,session,tpgid,comm", NULL);
+        perror("exec ps");
+        exit(1);
+        }
+
+        由于exec函数只有错误返回值，只要返回了一定是出错了，所以不需要判断它的返回值，直接在后面调用perror即可。注意在调用execlp时传了两个“ps”参数，第一个“ps”是程序名，execlp函数要在PATH环境变量中找到这个程序并执行它，而第二个“ps”是第一个命令行参数，execlp函数并不关心它的值，只是简单地把它传给ps程序，ps程序可以通过main函数的argv[0]取到这个参数。
+        调用exec后，原来打开的文件描述符仍然是打开的。利用这一点可以实现I/O重定向。
+        先看一个简单的例子，把标准输入转成大写然后打印到标准输出：
+        例 upper
+
+        /* upper.c */
+        #include <stdio.h>
+        int main(void)
+        {
+        int ch;
+        while((ch = getchar()) != EOF) {
+        putchar(toupper(ch));
+        }
+        return 0;
+        }
+
+        例 wrapper
+
+        /* wrapper.c */
+        #include <unistd.h>
+        #include <stdlib.h>
+        #include <stdio.h>
+        #include <fcntl.h>
+        int main(int argc, char *argv[])
+        {
+        int fd;
+        if (argc != 2) {
+        fputs("usage: wrapper file\n", stderr);
+        exit(1);
+        }
+        fd = open(argv[1], O_RDONLY);
+        if(fd<0) {
+        perror("open");
+        exit(1);
+        }
+        dup2(fd, STDIN_FILENO);
+        close(fd);
+        execl("./upper", "upper", NULL);
+        perror("exec ./upper");
+        exit(1);
+        }
+
+
+        wrapper程序将命令行参数当作文件名打开，将标准输入重定向到这个文件，然后调用exec执行upper程序，这时原来打开的文件描述符仍然是打开的，upper程序只负责从标准输入读入字符转成大写，并不关心标准输入对应的是文件还是终端。运行结果如下：
+
+        exec族
+        l 命令行参数列表
+        p 搜素file时使用path变量
+        v 使用命令行参数数组
+        e 使用环境变量数组,不使用进程原有的环境变量，设置新加载程序运行的环境变量
+
+### 3.3.3  wait/waitpid
+
+        僵尸进程: 子进程退出，父进程没有回收子进程资源（PCB），则子进程变成僵尸进程
+        孤儿进程: 父进程先于子进程结束，则子进程成为孤儿进程,子进程的父进程成为1号进程init进程，称为init进程领养孤儿进程
+
+        #include <sys/types.h>
+        #include <sys/wait.h>
+        pid_t wait(int *status);
+        pid_t waitpid(pid_t pid, int *status, int options);
+        < -1 回收指定进程组内的任意子进程
+        -1 回收任意子进程
+        0 回收和当前调用waitpid一个组的所有子进程
+        \> 0 回收指定ID的子进程
+
+        一个进程在终止时会关闭所有文件描述符，释放在用户空间分配的内存，但它的PCB还保留着，内核在其中保存了一些信息：如果是正常终止则保存着退出状态，如果是异常终止则保存着导致该进程终止的信号是哪个。这个进程的父进程可以调用wait或waitpid获取这些信息，然后彻底清除掉这个进程。我们知道一个进程的退出状态可以在Shell中用特殊变量$?查看，因为Shell是它的父进程，当它终止时Shell调用wait或waitpid得到它的退出状态同时彻底清除掉这个进程。
+        如果一个进程已经终止，但是它的父进程尚未调用wait或waitpid对它进行清理，这时的进程状态称为僵尸（Zombie）进程。任何进程在刚终止时都是僵尸进程，正常情况下，僵尸进程都立刻被父进程清理了，为了观察到僵尸进程，我们自己写一个不正常的程序，父进程fork出子进程，子进程终止，而父进程既不终止也不调用wait清理子进程：
+
+        #include <unistd.h>
+        #include <stdlib.h>
+        int main(void)
+        {
+        pid_t pid=fork();
+        if(pid<0) {
+            perror("fork");
+            exit(1);
+        }
+        if(pid>0) { /* parent */
+            while(1);
+        }
+        /* child */
+        return 0;
+        }
+
+        若调用成功则返回清理掉的子进程id，若调用出错则返回-1。父进程调用wait或waitpid时可能会：
+        * 阻塞（如果它的所有子进程都还在运行）。
+        * 带子进程的终止信息立即返回（如果一个子进程已终止，正等待父进程读取其终止信
+        息）。
+        * 出错立即返回（如果它没有任何子进程）。
+        这两个函数的区别是：
+        * 如果父进程的所有子进程都还在运行，调用wait将使父进程阻塞，而调用waitpid时如果在options参数中指定WNOHANG可以使父进程不阻塞而立即返回0。
+        * wait等待第一个终止的子进程，而waitpid可以通过pid参数指定等待哪一个子进程。可见，调用wait和waitpid不仅可以获得子进程的终止信息，还可以使父进程阻塞等待子进程终止，起到进程间同步的作用。如果参数status不是空指针，则子进程的终止信息通过这个参数传出，如果只是为了同步而不关心子进程的终止信息，可以将status参数指定为NULL。
+        例 waitpid
+
+        #include <sys/types.h>
+        #include <sys/wait.h>
+        #include <unistd.h>
+        #include <stdio.h>
+        #include <stdlib.h>
+        int main(void)
+        {
+            pid_t pid;
+            pid = fork();
+            if (pid < 0) {
+                perror("fork failed");
+                exit(1);
+        }
+        if (pid == 0) {
+                int i;
+                for (i = 3; i > 0; i--) {
+                printf("This is the child\n");
+                sleep(1);
+        }
+        exit(3);
+        } else {
+        int stat_val;
+        waitpid(pid, &stat_val, 0);
+        if (WIFEXITED(stat_val))
+        printf("Child exited with code %d\n", WEXITSTATUS(stat_val));
+        else if (WIFSIGNALED(stat_val))
+        printf("Child terminated abnormally, signal %d\n", WTERMSIG(stat_val));
+        }
+        return 0;
+        }
+
+        wait阻塞函数，阻塞等待子进程结束waitpid 4种情况 < -1 = -1 = 0 > 0
+        进程的退出状态
+        非阻塞状态，WNOHANG
+        获取进程退出状态的函数见manpages
