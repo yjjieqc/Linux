@@ -1,13 +1,14 @@
 # 4  进程间通信（IPC，Inter-Process Communication）
 
 每个进程各自有不同的用户地址空间，任何一个进程的全局变量在另一个进程中都看不到，所以进程之间要交换数据必须通过内核，在内核中开辟一块缓冲区，进程1把数据从用户空间拷到内核缓冲区，进程2再从内核缓冲区把数据读走，内核提供的这种机制称为进程间通信（IPC，InterProcess Communication）。
-       [图4.1 进程间通信](./figures/4-linux-IPC/进程间通信.png) 
-        
+
+![图4.1 进程间通信](./figures/4-linux-IPC/进程间通信.png "图4.1 进程间通信") 
+
 ## 4.1  pipe管道
 
 管道是一种最基本的IPC机制，由pipe函数创建：
 
-```        
+``` 
         #include <unistd.h>
         int pipe(int filedes[2]);
 ```
@@ -123,14 +124,146 @@ mmap可以把磁盘文件的一部分直接映射到内存，这样文件中的�
 
 prot参数有四种取值：
 
+* PROT_EXEC表示映射的这一段可执行，例如映射共享库
+* PROT_READ表示映射的这一段可读
+* PROT_WRITE表示映射的这一段可写
+* PROT_NONE表示映射的这一段不可访问
 
+flag参数有很多种取值，这里只讲两种，其它取值可查看mmap(2)
+* MAP_SHARED多个进程对同一个文件的映射是共享的，一个进程对映射的内存做了修改，另一个进程也会看到这种变化。
+* MAP_PRIVATE多个进程对同一个文件的映射不是共享的，一个进程对映射的内存做了修改，另一个进程并不会看到这种变化，也不会真的写到文件中去。
+如果mmap成功则返回映射首地址，如果出错则返回常数MAP_FAILED。当进程终止时，该进程的映射内存会自动解除，也可以调用munmap解除映射。munmap成功返回0，出错返回-1。
 
+下面做一个简单的实验
 
+使用mmap映射
 
+```
+        #include <stdlib.h>
+        #include <sys/mman.h>
+        #include <fcntl.h>
+        int main(void)
+        {
+            int *p;
+            int fd = open("hello", O_RDWR);
+            if (fd < 0) {
+                perror("open hello");
+                exit(1);
+            }
+            p = mmap(NULL, 6, PROT_WRITE, MAP_SHARED, fd, 0);
+            if (p == MAP_FAILED) {
+                perror("mmap");
+                exit(1);
+            }
+            close(fd);
+            p[0] = 0x30313233;
+            munmap(p, 6);
+            return 0;
+        }
+```
 
+* 用于进程间通信时，一般设计成结构体，来传输通信的数据
+* 进程间通信的文件，应该设计成临时文件
+* 当报总线错误时，优先查看共享文件是否有存储空间
 
+### 4.3.2  进程间共享通信
 
+写进程实现
 
+```
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <fcntl.h>
+        #include <sys/stat.h>
+        #include <sys/types.h>
+        #include <unistd.h>
+        #include <sys/mman.h>
+        #include <fcntl.h>
+        
+        #define MAPLEN 0x1000
+         
+        void sys_err(char* str, int exitno){
+        	perror("str");
+        	exit(exitno);
+        }
+        
+        int main(int argc, char * argv[]){
+        	char *mm;
+        	int fd, i = 0;
+        	if(argc <2){
+        		printf("./mmap_w filename\n");
+        		exit(1);
+        	}
+        	fd = open(argv[1], O_RDWR | O_CREAT, 0777);
+        	if(fd < 0){
+        		sys_err("open", 1);
+        	}
+        
+        	if(lseek(fd, MAPLEN-1, SEEK_SET)<0)
+        		sys_err("lseek", 3);
+        	if(write(fd, "\0", 1)<0)
+        		sys_err("write", 4);
+        
+        	mm = mmap(NULL, MAPLEN, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        	close(fd);
+        	if(mm == MAP_FAILED)
+        		sys_err("mmap", 2);
+        	while(1){
+        		sprintf(mm, "hello %d", i++);
+        		sleep(1);
+        	}
+        	munmap(mm, MAPLEN);
+        	return 0;
+        }
+```
+
+读进程实现
+
+```
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <fcntl.h>
+        #include <sys/stat.h>
+        #include <sys/types.h>
+        #include <unistd.h>
+        #include <sys/mman.h>
+        #include <fcntl.h>
+        
+        #define MAPLEN 0x1000
+         
+        void sys_err(char* str, int exitno){
+        	perror("str");
+        	exit(exitno);
+        }
+        
+        int main(int argc, char * argv[]){
+        	char *mm;
+        	int fd, i = 0;
+        	if(argc <2){
+        		printf("./mmap_w filename\n");
+        		exit(1);
+        	}
+        	fd = open(argv[1], O_RDWR, 0777);
+        	if(fd < 0){
+        		sys_err("open", 1);
+        	}
+        
+        	mm = mmap(NULL, MAPLEN, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        	close(fd);
+        	if(mm == MAP_FAILED)
+        		sys_err("mmap", 2);
+        	while(1){
+        		printf("%s\n", mm);
+        		sleep(1);
+        	}
+        	munmap(mm, MAPLEN);
+        	return 0;
+        }
+```
+
+**open和mmap的读写权限要匹配**
+
+## 4.4  Unix Domain Socket
 
 
 
