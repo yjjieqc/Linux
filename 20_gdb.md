@@ -9,9 +9,9 @@
 常用命令
 
 |命令|简写 |作用|
-|:-------|:-----|-----|
+|-------|-----|-----|
 |help |h|按模块列出命令类|
-|help class| |查看某一类型的具体命令|
+|help <class\>| |查看某一类型的具体命令|
 |list|l|查看代码，可跟行号函数名|
 |quit|q|退出gdb|
 |run|r|全速运行程序|
@@ -35,9 +35,50 @@ disable breakpoint| |禁用断点
 x| |查看内存 x /20xw 显示20个单元，16进制，4字节每个单元
 watch| |被设置观察点的变量发生变化时，打印显示
 i watch| |显示观察点
-core| |ulimit -c 1024 开启core文件，调试时 gdb a.out core
+core| |ulimit -c 1024 开启core文件，调试时 gdb a.out 若出错生成core
 
-gdb调试模式
+## 20.1  gdb调试模式
+
+run 全速运行
+
+start   单步调试
+
+set follow-fork-mode child  # Makefile项目管理
+
+## 20.2  用途
+
++ 项目代码编译管理
++ 节省编译项目时间
++ 一次编写终身受益
++ 操作示例文件：add.c sub.c mul.c dive.c main.c
+
+## 20.3  基本规则
+
+### 20.3.1  三要素
+
+* 目标
+* 条件
+* 命令
+
+## Makefile工作原理
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
