@@ -38,7 +38,7 @@
      #define	ERANGE		34	/* Math result not representable */
 
 
-![error](./figures/3-file-io/errno.png)
+![error](./figures/1-file-io/errno.png)
 
 ## perror ##
 
