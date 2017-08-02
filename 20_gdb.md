@@ -60,14 +60,59 @@ set follow-fork-mode child  # Makefile项目管理
 * 条件
 * 命令
 
-## Makefile工作原理
+## 20.4  Makefile工作原理
+
+* 分析各个目标和依校之问的关系
+* 根据依赖关系自底向上执行命令
+* 根据修改时间比目标新，确定更新
+* 如果目标不依核任何条件，则执行对应命令以示更新
+
+## 20.4  clean
+
+* 用途：清除编译生成的中问.o文件和最终目标文件
+* makeclean如果当前目录下有同名clean文件，则不执行clean对应的命令
+* 伪目标声明：.PHONY:clean
+* clean命令中的特殊符号
+- "-" 此条命令出错，make也会继续执行后续的命令。如："-rm main.o"
+- "@" 不显示命令本身，只显示结果。如： "@echo "clean done""
+* 其他：
+- make默认执行第一个出现的目标，可通过make dest指定要执行的目标
+- distclean目标
+- isntall目标
+- make - C 路径名  表示进入指定目录，调用里面的makefile
 
 
 
+注：
 
+makefile中有一些特殊变量
 
+$@表示目标，$^表示所有依赖，$<表示依赖的第一个
 
+基于字符串的內建函数
 
+函数用法|用途
+-----|-----
+$(wildcard *.c)| 查找符合条件的文件名
+$(subst ee, EE, feet)|字符串替换
+$(patsubst %.c, %.o, a.c)|模式查找替换
+$(stirp a b c)|去除参数中开头和结尾的空格
+$(findstring a, a b c)|在参数2中查找参数1，若找到返回参数1，否则返回空
+$(filter %.c, s, $(source))|过滤出符合模式后缀的文件名
+$(filter-out a b, a b c d)|反向过滤，过滤出c和d
+$(sort d a b c)|生序排序
+
+基于文件名的常用函数
+
+函数用法|作用
+----|----
+$(dir src/foo.c hack.c)|返回目录名 src/ ./
+$(notdir src/foo.c hack.c)|返回文件名foo.c hack.c
+$(suffix src/foo.c src-1/bar.s hacks)|返回后缀.c .s
+$(basename src/foo.c src-1/bar.c hacks)|返回前缀src/foo src-1/bar hacks
+$(addsuffix .c, foo bar)|返回添加后缀的文件名 foo.c bar.c
+$(addperfix src/, foo bar)|返回添加前缀后的文件名 src/foo src/bar
+$(jion aaa bbb, 111 222 333)|返回链接后值：aaa111 bbb222 333
 
 
 
