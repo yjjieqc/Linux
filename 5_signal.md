@@ -144,6 +144,7 @@ a signal handling function
 进程处理信号的行为：
 
 1. 默认处理动作
+
 	term
 
 	core
@@ -229,7 +230,7 @@ how参数的含义
 				putchar('1');
 			else
 				putchar('0');
-		puts("" );
+		puts("");  
 	}
 	
 	int main(void){
@@ -244,3 +245,43 @@ how参数的含义
 		}
 		return 0;
 	}
+
+## 5.5  信号捕捉设定
+
+	#include <signal.h>
+	
+	int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
+	
+	struct sigaction{
+		void (*sa_handler)(int);
+		void (*sa_sigaction)(int, siginfo_t *, void *);	//两者互斥
+		sigset_t sa_mask;
+		int sa_flags;
+		void (*sa_restorer)(void);
+	};
+
+	sa_handler : 早期的捕捉函数
+	sa_sigaction : 新添加的捕捉函数，可以传参，和sa_handler互斥，两者通过sa_flags选择采用哪种捕捉函数
+	sa_mask : 在执行捕捉函数时，设置阻塞其他信号，sa_mask | 进程阻塞信号集，退出捕捉函数后，还原回原有的阻塞信号集
+	sa_flags : SA_SIGINFO 或者0
+	sa_restorer : 保留，已过时
+
+举例SA_SIGINT被捕捉：
+
+当前进程从内核返回用户空间代码前检查是否有信号递达，有则去响应。
+
+### 5.5.1  利用SIGUSR1和SIGUSR2实现父子进程同步输出
+
+注意：子进程继承了父进程的信号屏蔽字和信号处理动作。
+
+## 5.6  C标准库信号处理函数
+
+typedef void (*sighandler_t)(int)
+sighandler_t signal(int signum, sighandler_t handler)
+
+int system(const char * command)
+集合fork,exec,wait一体
+
+### 5.6.1  signal
+
+## 5.7  
