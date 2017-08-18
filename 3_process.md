@@ -69,24 +69,24 @@ LANG
 HOME
 * 当前用户主目录的路径，很多程序需要在主目录下保存配置文件，使得每个用户在运行该程序时都有自己的一套配置。
 
-    用environ指针可以查看所有环境变量字符串，但是不够方便，如果给出name要在环境变量表中查找它对应的value，可以用getenv函数。
+用environ指针可以查看所有环境变量字符串，但是不够方便，如果给出name要在环境变量表中查找它对应的value，可以用getenv函数。
     
         #include <stdlib.h>
         char *getenv(const char *name);
     
-    getenv的返回值是指向value的指针，若未找到则为NULL。
-    修改环境变量可以用以下函数
+getenv的返回值是指向value的指针，若未找到则为NULL。
+修改环境变量可以用以下函数
     
         #include <stdlib.h>
         int setenv(const char *name, const char *value, int rewrite);
         void unsetenv(const char *name);
     
-    putenv和setenv函数若成功则返回为0，若出错则返回非0。
-    setenv将环境变量name的值设置为value。如果已存在环境变量name，那么
-    若rewrite非0，则覆盖原来的定义；
-    若rewrite为0，则不覆盖原来的定义，也不返回错误。
-    unsetenv删除name的定义。即使name没有定义也不返回错误。
-    例 修改环境变量
+putenv和setenv函数若成功则返回为0，若出错则返回非0。
+setenv将环境变量name的值设置为value。如果已存在环境变量name，那么
+若rewrite非0，则覆盖原来的定义；
+若rewrite为0，则不覆盖原来的定义，也不返回错误。
+unsetenv删除name的定义。即使name没有定义也不返回错误。
+例 修改环境变量
     
         #include <stdlib.h>
         #include <stdio.h>
