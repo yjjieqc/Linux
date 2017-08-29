@@ -276,12 +276,247 @@ how参数的含义
 
 ## 5.6  C标准库信号处理函数
 
-typedef void (*sighandler_t)(int)
-sighandler_t signal(int signum, sighandler_t handler)
-
-int system(const char * command)
-集合fork,exec,wait一体
+	typedef void (*sighandler_t)(int)
+	sighandler_t signal(int signum, sighandler_t handler)
+	
+	int system(const char * command)
+	集合fork,exec,wait一体
 
 ### 5.6.1  signal
 
-## 5.7  
+	#include <stdio.h>
+	#include <signal.h>
+	
+	void do_sig(int n)
+	{
+	        printf("Hello\n");
+	}
+	
+	int main(void)
+	{
+	        signal(SIGINT, do_sig);
+	        while(1)
+	        {
+	                printf("***********\n");
+	                sleep(1);
+	        }
+	}
+
+优点使用简单，缺点是不能设置屏蔽字，功能没有`sigaction`功能强大
+
+## 5.7  可重入函数
+
+可重入：可重新进入函数
+
+* 不含全局变量和静态变量是可重入函数的一个要素
+* 可重入函数见man 7 signal
+* 在信号捕捉函数里面应该使用可重入函数
+* 在信号捕捉函数里禁止调用不可重入函数
+
+例如：`strtok`就是一个不可重入函数，因为`strtok`内部维护了一个内部静态指针，保存上次切割到的位置，如果信号的捕捉函数中也调用了`strtok`函数，则会造成切割字符串混乱，应用`strtok_r`版本，r表示可重入。
+
+	#include <stdio.h>
+	#include <string.h>
+	
+	int main(void)
+	{
+		char buf[] = "hello world";
+		char *save = buf, *p;
+	
+		while((p = strtok_r(save, " ", &save))!= NULL)
+			printf("%s\n", p);
+
+		return 0;
+	}
+
+## 5.8  信号引起的竟态和异步I/O
+
+### 5.8.1  时序竟态
+
+	int pause(void)
+		使用进程挂起，直到有信号递达，如果递达信号是忽略，则继续挂起
+	int sigsuspend(const sigset_t *mask)
+		以通过制定mask来临时解除对某个信号的屏蔽；
+		然后挂起等待；
+		当sigsuspend返回时，进程的信号屏蔽字恢复为原来的值
+
+`mysleep`实现，这种方式是否存在BUG？
+
+	#include <stdio.h>
+	#include <signal.h>
+	
+	int mysleep(int n)
+	{
+		signal(SIGALRM, do_sig);
+		alarm(n);	//定时n秒
+		pause();
+	}
+	void do_sig(int n)
+	{
+		
+	}
+	
+	int main(void)
+	{
+		struct sigaction act;
+	
+		//act.sa_handler = do_sig;
+		//act.sa_handler = SIG_IGN;
+		act.sa_handler = SIG_DFL;
+		sigemptyset(&act.sa_mask);
+		act.sa_flags = 0;
+	
+		sigaction(SIGUSR1, &act, NULL);
+	
+		pause();
+	
+		return 0;
+	}
+
+### 5.8.2  全局变量异步I/O
+
+
+
+### 5.8.3  可重入函数
+
+
+
+### 5.8.4  避免异步I/O的类型
+
+sig_atomic_t		//平台下的原子类型
+
+volatile			//防止编译器开启优化选项时，优化对内存的读写
+
+## 5.9  SIGCHLD信号处理
+
+### 5.9.1  SIGCHLD信号处理
+
+子进程终止时
+
+子进程接收到SIGCHLD信号停止时
+
+子进程处在停止态，接收到SIGCHLD后唤醒时
+
+### 5.9.2  status处理方式
+
+	pid_t waitpid(pid_t pid, int *status, int options)
+	options
+		WNOHANG
+			没有子进程结束，立即返回
+		WUNTRACED
+			如果子进程由于被停止产生的SIGCHLD， waitpid则立即返回
+		WCONTINUED
+			如果子进程由于被SIGCONT唤醒而产生的SIGCHLD， waitpid则立即返回
+	获取status
+		WIFEXITED(status)
+			子进程正常exit终止，返回真
+				WEXITSTATUS(status)返回子进程正常退出值
+		WIFSIGNALED(status)
+			子进程被信号终止，返回真
+				WTERMSIG(status)返回终止子进程的信号值
+		WIFSTOPPED(status)
+			子进程被停止，返回真
+				WSTOPSIG(status)返回停止子进程的信号值
+		WIFCONTINUED(status)
+			子进程由停止态转为就绪态，返回真
+
+举例：
+
+	#include <stdio.h>
+	#include <signal.h>
+	#include <stdlib.h>
+	#include <unistd.h>
+	#include <errno.h>
+	#include <wait.h>
+	#include <sys/types.h>
+	
+	void do_sig_child(int signo){
+	/*      while(!(waitpid(0, NULL, WNOHANG)== -1))
+	        ;
+	*/
+	        int status;
+	        pid_t pid;
+	
+	        while(waitpid(0, &status,WNOHANG)>0){
+	                if(WIFEXITED(status))
+	                        printf("child %d exit %d\n",pid, WEXITSTATUS(status));
+	                else if(WIFSIGNALED(status))
+	                        printf("child %d cancle signal %d\n", pid, WTERMSIG(status));
+	}
+	}
+	void sys_err(char *str)
+	{
+	        perror(str);
+	        exit(1);
+	}
+	
+	int main(void){
+	        pid_t pid;
+	        int i;
+	        for (i = 0; i< 10; i++)
+	        {
+	                if((pid = fork()) == 0)
+	                        break;
+	                else if(pid< 0)
+	                        sys_err("fork");
+	        }
+	
+	        if(pid == 0) {
+	        int n = 3;
+	        while(n --) {
+	                printf("child ID %d\n", getpid());
+	                sleep(1);
+	                }
+	        return i;
+	        }
+	        else if(pid > 0){
+	        struct sigaction act;
+	        act.sa_handler = do_sig_child;
+	        sigemptyset(&act.sa_mask);
+		act.sa_flags = 0;
+	
+	        sigaction(SIGCHLD, &act, NULL);
+	        while(1) {
+	                printf("parent ID %d\n", getpid());
+	                sleep(1);
+	                }
+	        }
+	
+	}
+
+
+### 5.10.1  sigqueue
+
+	int sigqueue(pid_t pid, int sig, const union sigval value)
+	
+	union sigbal{
+		int sival_int;
+		void *sival_ptr;
+	}
+
+### 5.10.2  sigaction
+
+	void (*sa_sigaction)(int, siginfo_t *, void *)
+
+	siginfo_t {
+		int si_int;
+		void 	*siptr;
+		sigval_t	si_value;
+		...
+	}
+
+	sa_flags = SA_SIGINFO
+
+实例
+
+* 进程自己收发信号，在同一地址空间
+* 不同进程之间收发信号，不在同一地址空间，不适合传地址
+
+## 5.11  信号中断系统调用
+
+read阻塞时，信号中断系统调用：
+
+- 返回部分读到的数据
+- read调用失败，errno设置成EINTER
+
+
