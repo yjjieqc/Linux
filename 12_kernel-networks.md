@@ -430,3 +430,100 @@ POSIX.1定义了msghdr结构，它至少有以下成员：
         int           msg_flags;      /* flags (unused) */
     };
 ```
+函数recv和read类似，但是recv可以指定标志来控制如何接受数据。
+
+```c
+    #include <sys/types.h>
+    #include <sys/socket.h>
+
+    ssize_t recv(int sockfd, void *buf, size_t len, int flags);
+
+    ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
+                     struct sockaddr *src_addr, socklen_t *addrlen);
+
+    ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags);
+    //三个函数返回值：返回数据字节长度：若无可用数据或对等方已经按序结束，返回0；若出错，返回-1  
+```
+标志|描述
+--|--
+MSG_CMSG_CLOEXEC (recvmsg() only; since Linux 2.6.23)|
+MSG_DONTWAIT (since Linux 2.2)|
+MSG_ERRQUEUE|
+MSG_OOB|
+MSG_PEEK|
+MSG_TRUNC (since Linux 2.2)|
+MSG_WAITALL (since Linux 2.2)|
+
+当指定MSG_PEEK标志时，可以查看下一个要读的数据但不真正取走它。当再次调用read或者其中一个recv函数时，会返回刚才查看的数据。
+
+对于SOCK_STREAM套接字，接受的数据可以比预期少。MSG_WAITALL会阻止这种行为直到所请求的数据全部返回，recv函数才返回。对于SOCK_DGRAM和SOCK_SEQPACKET套接字，MSG_WAITALL标志没有改变什么行为，因为这些基于报文的套接字类型一次读取就返回整个报文。
+
+如果发送者已经调用shutdown来结束传输，或者网络协议支持按默认的顺序关闭并且发送端已经关闭，那么当所有的数据接收完毕后，recv会返回0。
+
+如果有兴趣定位发送者，可以使用recvfrom来得到数据的发送者源地址。
+
+如果addr非空，它将包含数据发送者的套接字端点地址。动调用recvfrom时，需要设置addrlen指向一个整数，该整数包含addr所指向的套接字缓冲区的字节长度。返回时，该整数设为该地址的实际字节长度。
+
+因为可以获得发送者的地址，recvfrom通常用于无连接的套接字，否则，recvfrom等同于recv。
+
+为了将接受到的数据送入多个缓冲区，类似于readv，或者想接受辅助数据，可以使用recvmsg。
+
+recvmsg使用msghdr机构指定接收数据的输入缓冲区。可以设置参数flags来改变recvmsg的默认行为。返回时，msghdr结构中的msg_flags字段被设为所接受数据的各种特征。recvmsg中反悔的各种可能值总结在下表中。
+
+标志|描述
+--|--
+MSG_EOR|
+MSG_TRUNC|
+MSG_CTRUNC|
+MSG_OOB|
+MSG_ERRQUEUE|
+
+
+## 12.6 套接字选项
+
+套接字提供了两个套机子选项接口来控制套接字的行为。一个接口用来设置选项，另一个接口可以查询选项状态。可以获取或设置以下3种选项。
+
+1. 通用选项，工作在所有套接字类型上
+2. 在套接字层次管理选项，但是依赖于下层协议的支持
+3. 特定于某协议的选项，每个协议独有的。
+
+可以用setsockopt函数来设置套接字选项。
+```c
+    #include <sys/types.h>          /* See NOTES */
+    #include <sys/socket.h>
+
+    int getsockopt(int sockfd, int level, int optname,
+                   void *optval, socklen_t *optlen);
+    int setsockopt(int sockfd, int level, int optname,
+                   const void *optval, socklen_t optlen);
+```
+参数level表示了选项应用的协议。如果选项是通用的套接字层次选项，则level设置成SOL_SOCKET。否则level设置成控制这个选项的协议编号。对于TCP选项，level是IPPROTO_TCP，对于IP，level是IPPROTO_IP。
+
+参数optval根据选项的不同指向一个数据结构或者一个整数。一些选项是off/on开关，如果整数非0，则启用选项。如果整数是0，则关闭选项。
+
+参数optlen是指向整数的指针。在调用getsockopt之前，设置该整数为复制选项缓冲区的长度。如果选项长度大于此值，则选项会被截断。如果实际长度正好小于此值，那么返回时将此值更新为实际长度。
+
+## 12.7 带外数据
+
+带外数据是一些通信协议所支持的可选功能，与普通数据相比，它允许更高优先级的数据传输。
+
+## 12.8 非阻塞和异步I/O
+
+通常，recv函数没有数据可用时会阻塞等待。同样的，当套接字输出队列没有足够的空间来发送消息时，send函数会阻塞。在套接字非阻塞模式下，行为会发生改变。在这种情况下，这些函数不会阻塞而是失败，将errno设置成EWOULBLOCK后者EAGAIN。当这种情况发生时，可以使用poll或者select来判断能否接收或者传输数据。
+
+套接字机制含有自己的处理异步I/O的方式，但这在Single UNIX Specification中并没有被标准化。一些文献把经典的基于套机子的异步I/O机制称为“基于信号的I/O”，区别于Single UNIX Specification中的通用异步I/O。在基于套接字的异步I/O中，当从套接字中读取数据时，后者当套接字写队列空间变得可用时，可以安排要发送的信号SIGIO。启用异步I/O是一个两步骤的过程。
+
+1. 建立套接字的所有权，这样信号可以被传递到合适的进程。
+2. 通知套接字当I/O操作不会阻塞时发信号。
+
+可以使用3种方式来完成第一个步骤
+1. 在fcntl中使用F_SETOWN命令。
+2. 在ioctl中使用FIOSETOWN命令。
+3. 在ioctl中使用SIOCSPGRP命令。
+
+要完成第二个步骤，有两个选择。
+1. 在fcntl中使用F_SETFL命令并且启用文件标识符O_ASYNC。
+2. 在ioctl中使用FIOASYNC命令。
+
+
+
