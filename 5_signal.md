@@ -5,12 +5,11 @@
 ### 5.1.1 信号编号
 
 查看linux系统信号
-
+```sh
     kill -l
-
-xingwenpeng@ubuntu:~$ kill -l
-
------|-------|--------|--------|---------
+```
+||||||
+----------|-------|--------|--------|---------
 1) SIGHUP |2) SIGINT |3) SIGQUIT| 4) SIGILL |5) SIGTRAP
 6) SIGABRT |7) SIGBUS |8) SIGFPE |9) SIGKILL |10) SIGUSR1
 11) SIGSEGV |12) SIGUSR2 |13) SIGPIPE |14) SIGALRM |15) SIGTERM
@@ -25,7 +24,6 @@ xingwenpeng@ubuntu:~$ kill -l
 58) SIGRTMAX-6 |59) SIGRTMAX-5| 60) SIGRTMAX-4 |61) SIGRTMAX-3| 62) SIGRTMAX-2
 63) SIGRTMAX-1 |64) SIGRTMAX
 
-
 ### 5.1.2 信号机制
 
 man 7 signal
@@ -39,7 +37,8 @@ First the signals described in the original POSIX.1-1990 standard.
 
 Signal Value Action Comment
 
-----|---|---
+|||||
+----|---|---|-----
 SIGHUP |1 |Term| Hangup detected on controlling terminal or death of controlling process
 SIGINT |2| Term| Interrupt from keyboard
 SIGQUIT |3 |Core |Quit from keyboard
@@ -62,9 +61,11 @@ SIGTTOU |22,22,27| Stop| tty output for background process
 The signals SIGKILL and SIGSTOP cannot be caught, blocked, or ignored.
 
 表中第一列是各信号的宏定义名称，第二列是各信号的编号，第三列是默认处理动作:
+
 Term表示终止当前进程。
 
 Core表示终止当前进程并且Core Dump（Core Dump 用于gdb调试）。
+
 Ign表示忽略该信号。
 
 Stop表示停止当前进程。
@@ -77,9 +78,9 @@ Cont表示继续执行先前停止的进程。
 
 ####  终端特殊按键
 
-ctl+c SIGINT
-ctl+z SIGTSTP
-ctl+\ SIGQUIT
++ ctl+c SIGINT
++ ctl+z SIGTSTP
++ ctl+\ SIGQUIT
 
 ####  硬件异常
 * 除0操作
@@ -88,9 +89,10 @@ ctl+\ SIGQUIT
 ####  kill函数或者kill命令
 
 不过，kill向调用者返回测试结果时，原来存在的被测试结果可能刚终止
-
+```c
     int kill (pid_t pid, int sig)
-    	pid > 0
+    /*
+		pid > 0
     		sig发送给ID为pid的进程
     	pid == 0
     		sig发送给与发送进程同组的所有进程
@@ -99,22 +101,23 @@ ctl+\ SIGQUIT
     	pid = -1
     		sig发送给发送进程有权限向他们发送信号的系统上的所有进程
     	sig为0时，用于检测，特定的pid进程是否存在，返回-1
-
+	*/
+```
 除此之外还有`raise`和`abort`函数
-
+```c
     int raise(int sig)	//自己向自己发送信号
     void abort(void)	//调用进程向自己发送SIGABRT信号
-
+```
 #### 某种软件条件已发生
 
-定时器`alarm`到时时，进程向自己发送SIGALRM信号，每个进程只有一个定时器
+定时器`alarm`到时时，进程向自己发送SIGALRM信号，每个进程**只有一个定时器**
 
-    
+```c  
     unsigned int alarm(unsigned int seconds)	//返回值为未到达的秒数，到达设定时间后返回SIGALRM信号
-
+```
 例：
-
-    #include <unsitd.h>
+```c
+    #include <unistd.h>
     #include <stdio.h>
     
     int main(void){
@@ -124,7 +127,7 @@ ctl+\ SIGQUIT
     	printf("counter = %d \n", counter);
     return 0;
     }
-
+```
 管道读端关闭，写端写数据
 
 ### 5.1.4  信号产生的原因
@@ -132,14 +135,13 @@ ctl+\ SIGQUIT
 * SIGHUP：当用户推出shell时，由该shell启动的所有进程将收到这个信号，默认动作为终止进程
 * SIGINT：当用户按下<Ctrl+C>组合键时，用户终端向正在运行中的由该终端启动的程序发送此信号。默认动作为终止进程。
 
-
 ## 5.2  进程处理信号行为
 
 manpage里信号3种处理方式：
 
-SIG_IGN
-SIG_DFL
-a signal handling function
++ SIG_IGN
++ SIG_DFL
++ a signal handling function
 
 进程处理信号的行为：
 
@@ -176,8 +178,13 @@ sigset_t 为信号集，可sizeof(sigset_t)查看
 
 ## 5.4  PCB信号集
 
-信号在内核中的表示示意图，画图
+<center>
 
+![信号在内核中的结构](./figures/signal/信号在内核中的示意图.png)
+
+信号在内核中的表示示意图
+
+</center>
 如果在进程解除对某信号的阻塞之前这种信号产生多次，将如何处理？POSIX.1允许系统传递该信号一次或者多次。Linux是这样实现的：常规信号在递达之前产生多次只记一次，而实时信号在递达之前产生多次可以依次放在一个队列里面。本章不讨论实时信号。而从上图来看，一个信号只有一个bit的未决标志，非0即1，不记录该信号产生了多少次，阻塞标志也是这样表示的。因此，未决和阻塞标志可以使用相同的sigset_t来储存，sigset_t也被称作信号集，这个类型可以表示每个信号的“有效”和“无效”状态，在未决信号集中，“有效”和“无效”的含义是该信号是否处于未决状态；而在阻塞信号集中，“有效”和“无效”的含义是该信号是否被阻塞。
 
 阻塞信号集也叫做当前进程的信号屏蔽字（Signal Mask)，这里的屏蔽应理解为阻塞而不是忽略。
@@ -188,7 +195,7 @@ sigset_t 为信号集，可sizeof(sigset_t)查看
 
 PEND未决信号集合|Block阻塞信号集合
 -----------|-----------
-用户不可设置，内核自动设置，用户可读|用户可以设置
+用户不可设置，内核自动设置，用户可读 | 用户可以设置
 
 ### 5.4.1  sigprocmask
 

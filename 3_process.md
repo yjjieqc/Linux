@@ -1,50 +1,189 @@
-# ３  进程
+# 3  进程
 
-我们知道，每个进程在内核中都有一个进程控制块(PCB)来维护进程相关的信息，Linux内核进程控制块是task_struct结构体.
+**程序和进程**
 
-    * 进程id。系统中每个进程有唯一的id,在C语言中用pid_t类型表示,其实就是一个非负整数。
+**程序**
 
-    * 进程的状态,有运行、挂起、停止、僵尸等状态。
+程序是一个储存在磁盘上某个目录中的可执行文件。内核使用exec函数，将程序读入内存执行。
 
-    * 进程切换时需要保存和恢复的一些CPU寄存器。
+**进程**
 
-    * 描述虚拟地址空间的信息。
+程序执行的实例被称之为进程。某些操作系统用任务（task）表示正在被执行的程序。
 
-    * 描述控制终端的信息。
+**线程和线程ID**
 
-    * 当前工作目录(Current Working Directory)。
+通常，一个进程只有一个控制线程——某一时刻执行的一组机器指令。对于某些问题，如过有多个控制线程分别作用于它的不同部分，那么解决起来容易的多。另外多个控制线程也可以充分利用多处理器系统的并行能力。
 
-    * umask掩码。
+一个进程内所有的线程共享同一地址空间、文件描述符、栈以及与进程相关的属性。因为它们能访问同一储存区，所以个县城在访问共享数据时需要采取同步措施以避免不一致。
 
-    * 文件描述符表,包含很多指向file结构体的指针。
+与进程相同，线程也是用ID标识，但是，线程ID只在它所属的进程内起作用，一个进程中的线程ID在另一个进程中没有意义。当在一进程中对某个特定线程进行处理时，我们可以使用该线程的ID引用它。
 
-    * 和信号相关的信息。
+本节记录进程控制原语，在此之前先了解进程的环境。本章中将学习：当程序执行时，其main函数是如何被调用的；命令行参数是如何传递给新程序的；典型的储存空间布局是什么样式；如何分配另外的储存空间；进程如何使用环境变量；进程的各种终止方式等。另外，还将说明longjmp和setjmp函数以及他们与栈交互作用。
 
-    * 用户id和组id。
+每个进程在内核中都有一个进程控制块(PCB)来维护进程相关的信息，Linux内核进程控制块是task_struct结构体.
 
-    * 控制终端、Session和进程组。
+* 进程id。系统中每个进程有唯一的id,在C语言中用pid_t类型表示,其实就是一个非负整数。
+* 进程的状态,有运行、挂起、停止、僵尸等状态。
+* 进程切换时需要保存和恢复的一些CPU寄存器。
+* 描述虚拟地址空间的信息。
+* 描述控制终端的信息。
+* 当前工作目录(Current Working Directory)。
+* umask掩码。
+* 文件描述符表,包含很多指向file结构体的指针。
+* 和信号相关的信息。
+* 用户id和组id。
+* 控制终端、Session和进程组。
+* 进程可以使用的资源上限(Resource Limit)。
 
-    * 进程可以使用的资源上限(Resource Limit)。
+## 3.1 main函数
 
-    // cat /proc/self/limits
-    
-    // ulimit -a
+C程序总是从main函数开始执行。main函数的原型是：
+```c
+    int main(int argc, char *argv[]);
+```
+其中，`argc`是参数数目，`argv`是指向参数各个指针构成的数组。当内核执行C程序时，在调用`main`前先调用一个特殊的启动例程。可执行程序文件将此启动例程指定为**程序的起始地址**——这是由连接编辑器设置的，而连接编辑器是由C编译器调用。启动例程从内核获取命令行参数和环境变量值，然后为按上述方法调用main函数做好安排。
 
-## 3.1  环境变量
+## 3.2 进程终止
 
-    libc中定义的全局变量environ指向环境变量表，environ没有包含在任何头文件中，所以在使用时要用extern声明。例如：
+有8种方式使进程终止（termination），其中5中是正常终止，他们是：
 
-        #include <stdio.h>
-        int main(void)
-        {
-            extern char **environ;
-            int i;
-            for(i=0; environ[i]!=NULL; i++)
-                printf("%s\n", environ[i]);
-            return 0;
-        }
-    
-    由于父进程在调用fork创建子进程时会把自己的环境变量表也复制给子进程，所以a.out打印的环境变量和Shell进程的环境变量是相同的。
+1. 从main返回；
+2. 调用exit；
+3. 调用_exit或_Exit;
+4. 最后一个线程从起启动例程返回；
+5. 从最后一个线程调用pthread_exit;
+
+异常终止有3种方式，他们是：
+
+6. 调用abort；
+7. 接收到一个信号；
+8. 最后一个线程对取消请求做出相应。
+
+### 3.2.1 退出函数
+```c
+    #include <stdlib.h>
+
+    void eixt(int status);
+    void _Exit(int status);
+
+    #include <unistd.h>
+
+    void _exit(int status);
+```
+
+### 3.2.2 函数atexit
+
+按照ISO C的规定，一个进程最多可以登记至多32个函数，这些函数由exit自动调用。我们称这些函数为终止处理程序（exit handler），并调用函数来登记这些函数。
+
+```c
+    #include <stdlib.h>
+
+    int atexit(void (*func)(void));
+```
+
+其中，atexit的参数是一个函数地址，当调用此函数时无需向他传递任何参数，也不期望它返回一个值。exit调用这些函数的顺序与它们登记时的顺序相反。同一函数若登记多次，也会被调用多次。
+
+<center>![一个C程序是如何启动和终止的](./figures/process/Cprogram.png)
+一个C程序是如何启动和终止的
+</center>
+
+注意，内核是程序执行的唯一方法是调用一个exec函数。进程自愿终止的唯一方法是显示或隐式调用_exit或_Exit。进程也可以非自愿地由一个信号使其终止。
+
+## 3.3 命令行参数
+
+当执行一个程序时，调用exec的进程可将命令行参数传递给该新程序。这是UNIX shell的一部分新常规操作。ISO C和POSIX.1都要求argv[argc]是一个空指针，即argv[argc]=NULL。
+
+## 3.4 环境表
+
+每个程序都接收一张环境表。与参数表一样，环境表也是一个字符指针数组，其中每个指针包含一个以null结束的C字符串的地址。全局变量environ则包含了该指针数组的地址：
+```c
+    extern char **environ;
+```
+例如，如果该环境包含5个字符串，每个字符串结尾处都有显示地有一个null字节。我们称environ为环境指针，指针数组为环境表，其中个指针指向的字符串为环境字符串。可用getenv和putenv来访问特定的环境变量。
+<center>
+![包含5个环境变量的environ环境表](./figures/process/envrionstring.png)
+包含5个环境变量的environ环境表
+</center>
+
+## 3.5 C程序的储存空间布局
+
+* 正文段。这是由CPU执行的机器指令部分。属性只读
+* 初始化数据段。通常此段称之为数据段，它包含饿了程序中需要明确地赋值的变量。
+* 未初始化数据段。通常称之为bss段，在程序开始前，内核将其初始化为0或者空指针。函数以外的普通声明存放在此。
+* 栈。自动变量以及每次函数调用时所需保存的信息都存放在此段中。
+* 堆。通常堆中进行动态储存分配。
+
+## 3.6 共享库
+
+共享库使得可执行文件中不再需要包含共用的库函数，而只需要在所有进程都可引用的储存区中保存这种库例程的一个副本。程序第一次执行或者第一次调用某个库函数时，用动态链接方法将程序与共享库函数链接。这减少了每个可执行文件的长度，但增加了一些运行时间开销。这种时间开销发生在该程序第一次被执行的时，或者每个共享库第一次被调用时。共享库的另一个优点是可以用库函数的新版本代替老版本而无需对使用该库的程序重新链接编辑（假设参数的数目和类型都没有发生变化）。
+
+## 3.7 储存空间分配
+
+ISO C说明了3个用于储存空间动态分配的函数。
+
+1. malloc，分配指定字节数的储存区。此储存区的初始值不确定。
+2. calloc，为只多功能数量指定长度的对象分配储存空间。该空间每一位（bit）都初始化为0.
+3. realloc，增加或者减少以前分配区的长度。当增加长度时，可能需要将以前分配的内容移到另一个足够大的区域，以便在尾端提供增加的储存区，而新增区域内的初始值则不确定。
+
+```c
+    #include <stdlib.h>
+
+    void *malloc(size_t size);
+    void *calloc(size_t mobj, size_t size);
+    void *realloc(void *ptr, size_t newsize);
+
+    void free(void *ptr);
+```
+这三个函数所返回的指针是适当对其的，使其可用于各种对象。这些分配例程通常使用sbrk(2)系统调用实现。该系统调用扩充（或缩小）进程的堆。
+
+**替代的储存空间分配程序**
+
+有很多可以替代malloc和free的函数。某些系统已经提供代替储存空间分配函数的库，另一些系统只提供标准储存空间分配程序。
+
+1. libmalloc
+2. vmalloc
+3. quick-fit
+4. jemalloc
+5. TCMalloc
+6. alloca
+
+## 3.8 环境变量
+
+环境变量的字符串形式是：
+name = value
+
+ISO C定义了一个函数getenv，可以用其取环境变量的值，但是该标准又称环境的内容是由实现定义的。
+
+```c
+    #include <stdlib.h>
+
+    char *getenv(const char*name);
+```
+函数返回一个指针，它指向name=value字符串中的value。我们应当使用getenv从环境变量中取一个指定环境变量的值，而不是访问environ。
+
+除了获取环境变量的值，有时也需要设置环境变量。但是并不是所有的系统都支持这种能力
+```c
+    #include <stdlib.h>
+
+    int putenv(char *string);   //若成功，返回0；若出错，返回非0
+    int setenv(const char *name, const char *value, int overwrite);
+    int unsetenv(const char *name);
+    //两个函数返回值：若成功，返回0；若出错，返回-1；
+```
+
+libc中定义的全局变量environ指向环境变量表，environ没有包含在任何头文件中，所以在使用时要用extern声明。例如：
+```c
+    #include <stdio.h>
+    int main(void)
+    {
+        extern char **environ;
+        int i;
+        for(i=0; environ[i]!=NULL; i++)
+            printf("%s\n", environ[i]);
+        return 0;
+    }
+```
+由于父进程在调用fork创建子进程时会把自己的环境变量表也复制给子进程，所以a.out打印的环境变量和Shell进程的环境变量是相同的。
     
 按照惯例，环境变量字符串都是name=value这样的形式，大多数name由大写字母加下划线组成，一般把name的部分叫做环境变量，value的部分则是环境变量的值。环境变量定义了进程的运行环境，一些比较重要的环境变量的含义如下：
 
@@ -70,242 +209,190 @@ HOME
 * 当前用户主目录的路径，很多程序需要在主目录下保存配置文件，使得每个用户在运行该程序时都有自己的一套配置。
 
 用environ指针可以查看所有环境变量字符串，但是不够方便，如果给出name要在环境变量表中查找它对应的value，可以用getenv函数。
-    
-        #include <stdlib.h>
-        char *getenv(const char *name);
-    
+```c   
+    #include <stdlib.h>
+
+    char *getenv(const char *name);
+```  
 getenv的返回值是指向value的指针，若未找到则为NULL。
 修改环境变量可以用以下函数
-    
+```c
         #include <stdlib.h>
+
         int setenv(const char *name, const char *value, int rewrite);
         void unsetenv(const char *name);
-    
+```    
 putenv和setenv函数若成功则返回为0，若出错则返回非0。
+
 setenv将环境变量name的值设置为value。如果已存在环境变量name，那么
-若rewrite非0，则覆盖原来的定义；
-若rewrite为0，则不覆盖原来的定义，也不返回错误。
+- 若rewrite非0，则覆盖原来的定义；
+- 若rewrite为0，则不覆盖原来的定义，也不返回错误。
+
 unsetenv删除name的定义。即使name没有定义也不返回错误。
+
 例 修改环境变量
-    
-        #include <stdlib.h>
-        #include <stdio.h>
-        int main(void)
-        {
-            printf("PATH=%s\n", getenv("PATH"));
-            setenv("PATH", "hello", 1);
-            printf("PATH=%s\n", getenv("PATH"));
-            return 0;
-        }
-    
-## 3.2  进程状态
-
-    修改进程资源限制，软限制可改，最大值不能超过硬限制，硬限制只有root用户可以修改
-```
-        #include <sys/time.h>
-        #include <sys/resource.h>
-        int getrlimit(int resource, struct rlimit *rlim);
-        int setrlimit(int resource, const struct rlimit *rlim);
-```
-
-    查看进程资源限制
-        cat /proc/self/limits
-        ulimit -a
-        
-##  3.3  进程原语
-
-### 3.3.1  fork
-
-        #include <unistd.h>
-        
-        pid_t fork(void);
-        
-        子进程复制父进程的0到3G空间和父进程内核中的PCB，但id不同。
-        fork调用一次返回两次
-        
-        + 父进程中返回子进程ID
-        + 子进程中返回0
-        + 读时共享，写时复制
-        fork()在父进程中的返回值与子进程中的getpid()返回值相同。
-
-        fork
-```
-        #include <sys/types.h>
-        #include <unistd.h>
-        #include <stdio.h>
-        #include <stdlib.h>
-        int main(void)
-        {
-            pid_t pid;
-            char *message;
-            int n;
-            pid = fork();
-            if (pid < 0) {
-                perror("fork failed");
-                exit(1);
-            }
-            if (pid == 0) {
-                message = "This is the child\n";
-                n = 6;
-            } else {
-                message = "This is the parent\n";
-                n = 3;
-            }
-            for(; n > 0; n--) {
-                printf(message);
-                sleep(1);
-            }
-            return 0;
-        }
-```
-
-        进程相关函数
-        getpid/getppid
-        
-            #include <sys/types.h>
-            #include <unistd.h>
-            pid_t getpid(void); //返回调用进程的PID号
-            pid_t getppid(void); //返回调用进程父进程的PID号
-        
-        getuid
-        
-            #include <unistd.h>
-            #include <sys/types.h>
-            uid_t getuid(void); //返回实际用户ID
-            uid_t geteuid(void); //返回有效用户ID，如调用sudo指令
-
-        getgid
-
-            #include <unistd.h>
-            #include <sys/types.h>
-            gid_t getgid(void); //返回实际用户组ID
-            gid_t getegid(void); //返回有效用户组ID
-
-        vfork
-        * 用于fork后马上调用exec函数
-        * 父子进程，共用同一地址空间,子进程如果没有马上exec而是修改了父进程出得到的变量值，此修改会在父进程中生效
-        * 设计初衷，提高系统效率，减少不必要的开销
-        * 现在fork已经具备读时共享写时复制机制，vfork逐渐废弃
-
-### 3.3.2  exec族
-
-        用fork创建子进程后执行的是和父进程相同的程序（但有可能执行不同的代码分支），子进程往往要调用一种exec函数以执行另一个程序。当进程调用一种exec函数时，该进程的用户空间代码和数据完全被新程序替换，从新程序的启动例程开始执行。调用exec并不创建新进程，所以调用exec前后该进程的id并未改变。其实有六种以exec开头的函数，统称exec函数：
-
-           #include <unistd.h>
-
-           extern char **environ;
-
-           int execl(const char *path, const char *arg, ...
-                           /* (char  *) NULL */);
-           int execlp(const char *file, const char *arg, ...
-                           /* (char  *) NULL */);
-           int execle(const char *path, const char *arg, ...
-                           /*, (char *) NULL, char * const envp[] */);
-           int execv(const char *path, char *const argv[]);
-           int execvp(const char *file, char *const argv[]);
-           int execvpe(const char *file, char *const argv[],
-                           char *const envp[]);
-
-        这些函数如果调用成功则加载新的程序从启动代码开始执行，不再返回，如果调用出错则返回-1，所以exec函数只有出错的返回值而没有成功的返回值。
-        这些函数原型看起来很容易混，但只要掌握了规律就很好记。不带字母p（表示path）的exec函数第一个参数必须是程序的相对路径或绝对路径，例如“/bin/ls”或“./a.out”，而不能是“ls”或“a.out”。对于带字母p的函数：
-        如果参数中包含/，则将其视为路径名。
-        否则视为不带路径的程序名，在PATH环境变量的目录列表中搜索这个程序。
-        带有字母l（表示list）的exec函数要求将新程序的每个命令行参数都当作一个参数传给它，命令行参数的个数是可变的，因此函数原型中有…，…中的最后一个可变参数应该是NULL，起sentinel的作用。对于带有字母v（表示vector）的函数，则应该先构造一个指向各参数的指针数组，然后将该数组的首地址当作参数传给它，数组中的最后一个指针也应该是NULL，就像main函数的argv参数或者环境变量表一样。
-        对于以e（表示environment）结尾的exec函数，可以把一份新的环境变量表传给它，其他exec函数仍使用当前的环境变量表执行新程序。
-        exec调用举例如下：
-
-        char *const ps_argv[] ={"ps", "-o", "pid,ppid,pgrp,session,tpgid,comm", NULL};
-        char *const ps_envp[] ={"PATH=/bin:/usr/bin", "TERM=console", NULL};
-        execl("/bin/ps", "ps", "-o", "pid,ppid,pgrp,session,tpgid,comm", NULL);
-        execv("/bin/ps", ps_argv);
-        execle("/bin/ps", "ps", "-o", "pid,ppid,pgrp,session,tpgid,comm", NULL, ps_envp);
-        execve("/bin/ps", ps_argv, ps_envp);
-        execlp("ps", "ps", "-o", "pid,ppid,pgrp,session,tpgid,comm", NULL);
-        execvp("ps", ps_argv);
-
-        事实上，只有execve()是真正的系统调用，其它五个函数最终都调用execve()，所以execve()在man手册第2节，其它函数在man手册第3节。这些函数之间的关系如下图所示。
-
-        一个完整的例子：
-```
-        #include <unistd.h>
-        #include <stdlib.h>
-        int main(void)
-        {
-        execlp("ps", "ps", "-o", "pid,ppid,pgrp,session,tpgid,comm", NULL);
-        perror("exec ps");
-        exit(1);
-        }
-```
-
-        由于exec函数只有错误返回值，只要返回了一定是出错了，所以不需要判断它的返回值，直接在后面调用perror即可。注意在调用execlp时传了两个“ps”参数，第一个“ps”是程序名，execlp函数要在PATH环境变量中找到这个程序并执行它，而第二个“ps”是第一个命令行参数，execlp函数并不关心它的值，只是简单地把它传给ps程序，ps程序可以通过main函数的argv[0]取到这个参数。
-        调用exec后，原来打开的文件描述符仍然是打开的。利用这一点可以实现I/O重定向。
-        先看一个简单的例子，把标准输入转成大写然后打印到标准输出：
-        例 upper
-
-```
-        /* upper.c */
-        #include <stdio.h>
-        int main(void)
-        {
-        int ch;
-        while((ch = getchar()) != EOF) {
-        putchar(toupper(ch));
-        }
+```c    
+    #include <stdlib.h>
+    #include <stdio.h>
+    int main(void)
+    {
+        printf("PATH=%s\n", getenv("PATH"));
+        setenv("PATH", "hello", 1);
+        printf("PATH=%s\n", getenv("PATH"));
         return 0;
-        }
-
-        例 wrapper
-
-        /* wrapper.c */
-        #include <unistd.h>
-        #include <stdlib.h>
-        #include <stdio.h>
-        #include <fcntl.h>
-        int main(int argc, char *argv[])
-        {
-        int fd;
-        if (argc != 2) {
-        fputs("usage: wrapper file\n", stderr);
-        exit(1);
-        }
-        fd = open(argv[1], O_RDONLY);
-        if(fd<0) {
-        perror("open");
-        exit(1);
-        }
-        dup2(fd, STDIN_FILENO);
-        close(fd);
-        execl("./upper", "upper", NULL);
-        perror("exec ./upper");
-        exit(1);
-        }
+    }
 ```
 
-        wrapper程序将命令行参数当作文件名打开，将标准输入重定向到这个文件，然后调用exec执行upper程序，这时原来打开的文件描述符仍然是打开的，upper程序只负责从标准输入读入字符转成大写，并不关心标准输入对应的是文件还是终端。运行结果如下：
+## 7.9 函数setjmp和longjmp
 
-        exec族
-        l 命令行参数列表
-        p 搜素file时使用path变量
-        v 使用命令行参数数组
-        e 使用环境变量数组,不使用进程原有的环境变量，设置新加载程序运行的环境变量
+在C中，goto语句是不能跨越函数的，而执行这种跳转功能的是函数setjmp和longjmp。这两个函数在处理发生在很深层嵌套函数调用中的出错情况是非常有用的。
 
-### 3.3.3  wait/waitpid
+## 7.10 函数getrlimit和setrlimit
 
-        僵尸进程: 子进程退出，父进程没有回收子进程资源（PCB），则子进程变成僵尸进程
-        孤儿进程: 父进程先于子进程结束，则子进程成为孤儿进程,子进程的父进程成为1号进程init进程，称为init进程领养孤儿进程
+每个进程都有一组资源限制，其中一些可以用getrlimit和setrlimit函数查询和更改。
 
-        #include <sys/types.h>
-        #include <sys/wait.h>
-        pid_t wait(int *status);
-        pid_t waitpid(pid_t pid, int *status, int options);
-        < -1 回收指定进程组内的任意子进程
-        -1 回收任意子进程
-        0 回收和当前调用waitpid一个组的所有子进程
-        \> 0 回收指定ID的子进程
+```c
+    #include <sys/resource.h>
 
-        一个进程在终止时会关闭所有文件描述符，释放在用户空间分配的内存，但它的PCB还保留着，内核在其中保存了一些信息：如果是正常终止则保存着退出状态，如果是异常终止则保存着导致该进程终止的信号是哪个。这个进程的父进程可以调用wait或waitpid获取这些信息，然后彻底清除掉这个进程。我们知道一个进程的退出状态可以在Shell中用特殊变量$?查看，因为Shell是它的父进程，当它终止时Shell调用wait或waitpid得到它的退出状态同时彻底清除掉这个进程。
-        如果一个进程已经终止，但是它的父进程尚未调用wait或waitpid对它进行清理，这时的进程状态称为僵尸（Zombie）进程。任何进程在刚终止时都是僵尸进程，正常情况下，僵尸进程都立刻被父进程清理了，为了观察到僵尸进程，我们自己写一个不正常的程序，父进程fork出子进程，子进程终止，而父进程既不终止也不调用wait清理子进程：
+    int getrlimit(int resource, struct rlimit *rlptr);
+    int setrlimit(int resource, const struct rlimit *rlptr);
 
+    struct rlimit{
+        rlim_t  rlim_cur;   /*soft limit: current limit*/
+        rlim_t  rlim_max;   /*hard limit: maximum value for rlim_cur*/
+    };
+```
+在更改资源限制时，需遵循下列3条规则。
+1. 任何一个进程都可以将一个软限制值更改为小于或等于其硬限制值。
+2. 任何一个进程都可以降低硬限制值，但它必须大于或等于软限制值。这种降低对普通用户是不可逆的。
+3. 只有超级用户进程可以提高硬限制值。
+
+查看进程资源限制
+```sh
+    cat /proc/self/limits
+    ulimit -a
+```        
+
+# 8 进程控制
+
+## 8.1 引言
+本节介绍UNIX系统控制机制，包括创建新进程、执行程序和进程终止。还将说明进程属性的各种ID——实际、有效和保存的用户ID和组ID，以及它们如何收到进程控制原语的影响。本章还包罗了解释器文件和system函数。本章最后讲述了大多数UNIX系统所提供的进程会计机制，这种机制使我们从另一个角度了解进程的控制机制。
+
+## 8.2 进程标识
+
+每个进程都有一个非负整型表示的唯一进程ID。有时应用程序也将进程ID作为名字的一部分来创建一个唯一的文件名。虽然是唯一的，但是进程ID是可复用的。当一个进程终止后，其进程ID就成为复用的候选ID。
+
+系统中有一些专用进程，但具体细节并不相同。ID为0的进程通常是调度进程，常常被称为交换进程（swapper）。该进程是内核的一部分，它并不执行任何磁盘上的程序，因此也被称之为系统进程。进程ID1统称是init进程，在自举过程结束时由内核调用。此进程负责在自举内核后启动一个UNIX系统。init通常读取与系统相关的文件，并将系统引导到一个状态。init进程决不会终止。它是一个普通用户进程，但是以超级用户特权运行。本章稍后会说明init如何成为所有孤儿进程的父进程。
+
+除了进程ID，每个进程还有其他一些标识符，下列函数返回这些标识符:
+```C        
+    //#include <sys/types.h>
+    #include <unistd.h>
+    pid_t getpid(void); //返回调用进程的PID号
+    pid_t getppid(void); //返回调用进程父进程的PID号
+    
+    uid_t getuid(void); //返回实际用户ID
+    uid_t geteuid(void); //返回有效用户ID，如调用sudo指令
+    
+    gid_t getgid(void); //返回实际用户组ID
+    gid_t getegid(void); //返回有效用户组ID
+```
+注意这些函数都没有出错返回。
+
+## 8.3 函数fork
+
+一个现有的进程可以调用fork函数创建一个新的进程。
+```c
+    #include <unsitd.h>
+
+    pid_t fork(void);
+    //子进程返回0，父进程返回子进程ID；若出错，返回-1；
+```
+由fork创建的进程称之为子进程。fork函数调用一次，返回两次。区别在于父子进程中返回值不同。将子进程ID返回给父进程的理由是：因为一个进程的子进程可以有多个，并且没有一个函数使一个进程可以获得其所有子进程的进程ID。fork使子进程得到返回值0的理由是：一个子进程只会有一个父进程，所以子进程总是可以调用getppid以获得其父进程的进程ID（进程ID0总是由内核交换进程使用，所以一个子进程的进程ID不可能为0）。
+
+子进程和父进程继续执行fork调用之后的指令。子进程是父进程的副本。例如，自己成获得父进程数据空间、堆和栈的完全副本，但是并不共享这些储存空间，父子进程共享正文段。由于fork后经常跟随者exec，所以现在很多实现并不执行一个父进程的数据段、栈和堆的完全副本，而采用写时复制的方法。
+
+子进程复制父进程的0到3G空间和父进程内核中的PCB，但id不同。
++ fork调用一次返回两次
++ 父进程中返回子进程ID
++ 子进程中返回0
++ 读时共享，写时复制
++ fork()在父进程中的返回值与子进程中的getpid()返回值相同。
++ 一般而言，fork之后是父进程先执行还是子进程先执行是不确定的，取决于内核调度算法。
+
+## 8.4 函数vfork
+
+vfork函数用于创建一个新进程，而该新锦成的目的是exec一个新程序，并不将父进程的地址空间完全复制到子进程中。
+* 用于fork后马上调用exec函数
+    
+* 父子进程，共用同一地址空间,子进程如果没有马上exec而是修改了父进程出得到的变量值，此修改会在父进程中生效
+    
+* 设计初衷，提高系统效率，减少不必要的开销
+    
+* 现在fork已经具备读时共享写时复制机制，vfork逐渐废弃
+
+vfork和fork之间的另一个区别是：vfork保证子进程先运行，在它调用exec或者exit后父进程才可能被调度运行，当子进程调用两个函数中任意一个时，父进程会恢复运行。
+
+## 8.5 函数exit
+
+进程有5种正常退出方式和3种异常终止方式。5种正常终止方式如下：
+
+1. 在main函数内执行return语句。这等效于exit。
+2. 调用exit函数。此函数由ISO C定义，其操作包括调用各终止函数处理程序（终止处理程序在调用atexit函数时登记），然后关闭I/O流。
+3. 调用_exit或_Exit函数。ISO C定义_Exit，其目的是为进程提供一种无需运行终止处理程序或信号处理程序而终止的方法。对标准I/O流是否进行冲洗，这取决于实现。
+4. 进程的最后一个线程在启动例程中执行return语句。但是，该线程的返回值不会用作进程的返回值。当最后一个线程从其启动例程返回时，该进程以终止状态0返回。
+5. 进程最后一个线程调用pthread_exit函数。如同前面一样，在这种情况下，进程终止状态总是0，与传送给pehread_exit的参数无关。
+
+3种异常终止方式具体如下：
+
+1. 调用abort。它产生SIGABRT信号，这是一种异常终止的一种特例。
+2. 接收到某些信号时。信号可由进程自身（如调用abort函数）、其他进程或内核产生；
+3. 最后一个线程对“取消”（canellation)请求做出响应。默认情况下，“取消”以延迟方式发生：一个线程要求取消另一个线程，若干时间后，目标线程终止。
+
+在说明fork函数时，显而易见，子进程是在父进程调用fork后生成的。子进程会将其终止状态返回给父进程。但是如果父进程在子进程之前终止，那又将如何呢？其回答是：对于父进程已经种植的所有进程，它们的父进程都变成init进程。我们称这些进程由init进程收养。其操作大概是：在一个进程终止时，内核逐个检查所有活动的进程，以判断它是不是正要终止进程的子进程，如果是，则该进程父进程就变更为1（init进程的ID）。这种方法保证了每个进程有一个父进程。
+
+另一个我们关心的问题是如果子进程在父进程之前终止，那么父进程又如何能在做出相应检查时得到子进程的终止状态呢？如果子进程完全消失了，父进程在最终准备好检查子进程是否终止时是无法获取它的终止状态的。内核为每个终止子进程保存了一定量的信息，所以当终止进程的父进程调用wait或者waitpid时，可以得到这些信息。这些信息至少包括了进程ID、该进程的终止状态以及该进程使用CPU的时间总量。内核可以释放终止进程所使用的所有储存区，关闭其所有打开文件。在UNIX术语中，一个已经终止，但是其父进程尚未对其进行善后处理（获取终止进程相关信息、释放它仍占用的资源）的进程被称为僵尸进程。
+
+最后一个要考虑的问题是：一个由init收养的进程是否会变为僵尸进程？答案是否，因为init被编写成无论何时只要有一个子进程终止，init就会调用一个wait函数获取其终止状态。这样也就防止了系统中塞满僵尸进程。
+
+__僵尸进程__: 子进程退出，父进程没有回收子进程资源（PCB），则子进程变成僵尸进程。
+
+__孤儿进程__: 父进程先于子进程结束，则子进程成为孤儿进程,子进程的父进程成为1号进程init进程，称为init进程领养孤儿进程。
+
+## 8.6 函数wait和waitpid
+
+当一个进程正常或异常终止时，内核就向其父进程发送SIGCHLD信号。因为子进程终止是异步事件（这可以再在父进程运行任何时刻发生），所以这种信号也是内核向父进程发送的异步通知。父进程可以选择忽略信号，或者提供一个信号发生时即被调用执行的函数（信号处理程序）。对于这种喜好系统的默认处理是忽略它。现在需要知道的是调用wait或waitpid的进程可能会发生什么。
+
+若调用成功则返回清理掉的子进程id，若调用出错则返回-1。父进程调用wait或waitpid时可能会：
++ 如果其所有子进程都还在运行，则阻塞。
++ 如果一个子进程终止，正等待父进程获取其终止状态，则取得该子进程的终止状态并返回。
++ 如果它没有任何子进程，则立即出错返回。
+
+```c
+    #include <sys/types.h>
+    #include <sys/wait.h>
+
+    pid_t wait(int *status);
+    pid_t waitpid(pid_t pid, int *status, int options); //pid参数解释见下
+    //两个函数若返回值：若成功，返回进程ID；若出错，返回0（见后面的说明）或-1
+```
+
+这两个函数的区别是：
+* 如果父进程的所有子进程都还在运行，调用wait将使父进程阻塞，而调用waitpid时如果在options参数中指定WNOHANG可以使父进程不阻塞而立即返回0。
+* wait等待第一个终止的子进程，而waitpid可以通过pid参数指定等待哪一个子进程。可见，调用wait和waitpid不仅可以获得子进程的终止信息，还可以使父进程阻塞等待子进程终止，起到进程间同步的作用。如果参数status不是空指针，则子进程的终止信息通过这个参数传出，如果只是为了同步而不关心子进程的终止信息，可以将status参数指定为NULL。
+* 
+一个进程在终止时会关闭所有文件描述符，释放在用户空间分配的内存，但它的PCB还保留着，内核在其中保存了一些信息：如果是正常终止则保存着退出状态，如果是异常终止则保存着导致该进程终止的信号是哪个。这个进程的父进程可以调用wait或waitpid获取这些信息，然后彻底清除掉这个进程。我们知道一个进程的退出状态可以在Shell中用特殊变量$?查看，因为Shell是它的父进程，当它终止时Shell调用wait或waitpid得到它的退出状态同时彻底清除掉这个进程。
+
+如果一个进程已经终止，但是它的父进程尚未调用wait或waitpid对它进行清理，这时的进程状态称为僵尸（Zombie）进程。任何进程在刚终止时都是僵尸进程，正常情况下，僵尸进程都立刻被父进程清理了，为了观察到僵尸进程，我们自己写一个不正常的程序，父进程fork出子进程，子进程终止，而父进程既不终止也不调用wait清理子进程：
+
+正如前面所述，如果一个进程有几个子进程，那么只要有一个子进程退出，wait就返回。如果要等待一个指定的进程终止（如果知道要等待的进程ID），早起的UNIX通过反复调用wait知道找到所期望的进程终止，POSIX.定义了waitpid函数提供这种功能（以及其他一些功能）。__对于wait，其唯一出错是调用进程没有子进程。但是对于waitpid，如果指定的进程或进程组不存在，或者参数pid指定的进程不是调用进程的子进程，都可能出错。__对于pid参数的解释如下：
+
+    < -1 回收指定进程组内的任意子进程
+    -1 回收任意子进程
+    0 回收和当前调用waitpid一个组的所有子进程
+    > 0 回收指定ID的子进程
+
+```c
         #include <unistd.h>
         #include <stdlib.h>
         int main(void)
@@ -321,49 +408,338 @@ unsetenv删除name的定义。即使name没有定义也不返回错误。
         /* child */
         return 0;
         }
+```
 
-        若调用成功则返回清理掉的子进程id，若调用出错则返回-1。父进程调用wait或waitpid时可能会：
-        * 阻塞（如果它的所有子进程都还在运行）。
-        * 带子进程的终止信息立即返回（如果一个子进程已终止，正等待父进程读取其终止信
-        息）。
-        * 出错立即返回（如果它没有任何子进程）。
-        这两个函数的区别是：
-        * 如果父进程的所有子进程都还在运行，调用wait将使父进程阻塞，而调用waitpid时如果在options参数中指定WNOHANG可以使父进程不阻塞而立即返回0。
-        * wait等待第一个终止的子进程，而waitpid可以通过pid参数指定等待哪一个子进程。可见，调用wait和waitpid不仅可以获得子进程的终止信息，还可以使父进程阻塞等待子进程终止，起到进程间同步的作用。如果参数status不是空指针，则子进程的终止信息通过这个参数传出，如果只是为了同步而不关心子进程的终止信息，可以将status参数指定为NULL。
-        例 waitpid
+## 8.7 函数waitid
 
-        #include <sys/types.h>
-        #include <sys/wait.h>
-        #include <unistd.h>
-        #include <stdio.h>
-        #include <stdlib.h>
-        int main(void)
-        {
-            pid_t pid;
-            pid = fork();
-            if (pid < 0) {
-                perror("fork failed");
-                exit(1);
-        }
-        if (pid == 0) {
-                int i;
-                for (i = 3; i > 0; i--) {
-                printf("This is the child\n");
-                sleep(1);
-        }
-        exit(3);
-        } else {
-        int stat_val;
-        waitpid(pid, &stat_val, 0);
-        if (WIFEXITED(stat_val))
-        printf("Child exited with code %d\n", WEXITSTATUS(stat_val));
-        else if (WIFSIGNALED(stat_val))
-        printf("Child terminated abnormally, signal %d\n", WTERMSIG(stat_val));
-        }
-        return 0;
-        }
+Single UNIX Specification包括了两一个取得进程中止状态的函数——waitid，此函数类似于waitpid，但是提供了更多的灵活性。
 
-        wait阻塞函数，阻塞等待子进程结束waitpid 4种情况 < -1 = -1 = 0 > 0
-        进程的退出状态
-        非阻塞状态，WNOHANG
-        获取进程退出状态的函数见manpages
+```c
+	#include <sys/wait.h>
+
+	int waitid(idtype_ idtype, id_t id, siginfo_t *infop, int options);
+	//返回值：若成功，返回0；若失败，返回-1
+```
+与waitpid相似，waitid允许一个进程指定要等待的子进程。但它采用两个不同的参数表示要等待的子进程所属的类型，而不是将此进程ID或进程组ID组合成一个参数。id参数的作用于idtype的值相关。该函数支持的idtype类型如下：
+* P_PID 等待一特定进程。
+* P_PGID 等待一特定进程组中任意进程。
+* P_ALL 等待任一子进程。
+
+options则是按照预定标记取或运算。
+
+## 8.8 函数wait3和wait4
+
+大多数UNIX系统实现提供了另外两个函数wait3和wait4。这两个函数是从BSD分支上沿袭下来的，这与附加参数有关。改参数允许内核返回由终止进程及其所有子进程使用的资源概况。包括用户CPU时间总量、系统CPU时间总量、缺页次数、接受到信号的次数等。
+
+```c
+       #include <sys/types.h>
+       #include <sys/time.h>
+       #include <sys/resource.h>
+       #include <sys/wait.h>
+
+       pid_t wait3(int *status, int options, struct rusage *rusage);
+
+       pid_t wait4(pid_t pid, int *status, int options, struct rusage *rusage);
+	//函数返回值：若成功，返回进程ID；若失败，返回-1
+```
+例 waitpid
+```c
+    #include <sys/types.h>
+    #include <sys/wait.h>
+    #include <unistd.h>
+    #include <stdio.h>
+    #include <stdlib.h>
+    int main(void)
+    {
+        pid_t pid;
+        pid = fork();
+        if (pid < 0) {
+            perror("fork failed");
+            exit(1);
+    }
+    if (pid == 0) {
+            int i;
+            for (i = 3; i > 0; i--) {
+            printf("This is the child\n");
+            sleep(1);
+    }
+    exit(3);
+    } else {
+    int stat_val;
+    waitpid(pid, &stat_val, 0);
+    if (WIFEXITED(stat_val))
+    printf("Child exited with code %d\n", WEXITSTATUS(stat_val));
+    else if (WIFSIGNALED(stat_val))
+    printf("Child terminated abnormally, signal %d\n", WTERMSIG(stat_val));
+    }
+    return 0;
+    }
+```
+wait阻塞函数，阻塞等待子进程结束waitpid 4种情况 < -1 = -1 = 0 > 0
+
+进程的退出状态
+
+非阻塞状态，WNOHANG
+
+获取进程退出状态的函数见manpages
+
+## 8.9 竞争条件
+
+当多个进程都企图对共享数据进行某种处理，而最后的结果又取决于进程运行的顺序时，我们认为发生了竞争条件。如果在fork后的某种逻辑显示或隐式地依赖于在fork之后是父进程先运行还是子进程先运行，那么fork函数就会是竞争条件活跃的滋生地。通常我们不能预料那个进程先运行。即使我们知道那个进程先运行，再该进程开始运行后所发生的事情也依赖于系统负载以及内核的调度算法。
+
+如果一个进程希望等待一个子进程终止，则它必须调用wait函数中的一个。如果一个进程要等待其父进程终止，可以使用下列循环：
+```c
+    while(getppid() != 1)
+    sleep(1);
+```
+这种形式的循环称为轮训，它的问题是浪费了CPU时间，因为调用者每隔1s都被唤醒，然后进行条件测试。为了避免竞争条件和轮训，在多个进程之间需要某种形式的信号发送和接收的方法。在UNIX中可以采用信号机制。
+
+### 3.10 函数exec族
+
+用fork创建子进程后执行的是和父进程相同的程序（但有可能执行不同的代码分支），子进程往往要调用一种exec函数以执行另一个程序。当进程调用一种exec函数时，该进程的用户空间代码和数据完全被新程序替换，从新程序的启动例程开始执行。调用exec并不创建新进程，所以调用exec前后该进程的id并未改变。exec只是用磁盘傻瓜的一个新的程序替换了当前进程的正文段、数据段、堆段和栈段。其实有7种不同的exec函数，统称exec函数，这些exec函数使得UNIX系统更加完善。用fork可以创建新的进程，用exec可以初始执行新的程序，。exit函数和wait函数处理终止和等待终止。这是我们需要的基本的进程控制原语。
+```c
+    #include <unistd.h>
+    extern char **environ
+    int execl(const char *path, const char *arg, ...
+                    /* (char  *) NULL */);
+    int execle(const char *path, const char *arg, ...
+                    /*, (char *) NULL, char * const envp[] */);
+    int execlp(const char *file, const char *arg, ...
+                    /* (char  *) NULL */);
+    int execv(const char *path, char *const argv[]);
+    int execvp(const char *file, char *const argv[]);
+    int execvpe(const char *file, char *const argv[],
+                    char *const envp[]);
+    int fexecve(int fd, char *const argv[], char *const envp[]);
+```
+这些函数如果调用成功则加载新的程序从启动代码开始执行，不再返回，如果调用出错则返回-1，所以exec函数只有出错的返回值而没有成功的返回值。
+
+这些函数原型看起来很容易混，但只要掌握了规律就很好记。不带字母p（表示path）的exec函数第一个参数必须是程序的相对路径或绝对路径，例如“/bin/ls”或“./a.out”，而不能是“ls”或“a.out”。对于带字母p的函数：
+
+如果参数中包含/，则将其视为路径名。否则视为不带路径的程序名，在PATH环境变量的目录列表中搜索这个程序。
+
+带有字母l（表示list）的exec函数要求将新程序的每个命令行参数都当作一个参数传给它，命令行参数的个数是可变的，因此函数原型中有…，…中的最后一个可变参数应该是NULL，起sentinel的作用。对于带有字母v（表示vector）的函数，则应该先构造一个指向各参数的指针数组，然后将该数组的首地址当作参数传给它，数组中的最后一个指针也应该是NULL，就像main函数的argv参数或者环境变量表一样。
+
+对于以e（表示environment）结尾的exec函数，可以把一份新的环境变量表传给它，其他exec函数仍使用当前的环境变量表执行新程序。
+
+exec调用举例如下：
+
+        char *const ps_argv[] ={"ps", "-o", "pid,ppid,pgrp,session,tpgid,comm", NULL};
+        char *const ps_envp[] ={"PATH=/bin:/usr/bin", "TERM=console", NULL};
+        execl("/bin/ps", "ps", "-o", "pid,ppid,pgrp,session,tpgid,comm", NULL);
+        execv("/bin/ps", ps_argv);
+        execle("/bin/ps", "ps", "-o", "pid,ppid,pgrp,session,tpgid,comm", NULL, ps_envp);
+        execve("/bin/ps", ps_argv, ps_envp);
+        execlp("ps", "ps", "-o", "pid,ppid,pgrp,session,tpgid,comm", NULL);
+        execvp("ps", ps_argv);
+
+事实上，只有execve()是真正的系统调用，另外6个只是库函数，它们最终都调用execve()，所以execve()在man手册第2节，其它函数在man手册第3节。这些函数之间的关系如下图所示。
+<center>
+![7个exec函数之间的关系](./figures/process/execfamily.png)
+7个exec函数之间的关系
+</center>
+
+一个完整的例子：
+```c
+    #include <unistd.h>
+    #include <stdlib.h>
+    int main(void)
+    {
+        execlp("ps", "ps", "-o", "pid,ppid,pgrp,session,tpgid,comm", NULL);
+        perror("exec ps");
+        exit(1);
+    }
+```
+
+由于exec函数只有错误返回值，只要返回了一定是出错了，所以不需要判断它的返回值，直接在后面调用perror即可。注意在调用execlp时传了两个“ps”参数，第一个“ps”是程序名，execlp函数要在PATH环境变量中找到这个程序并执行它，而第二个“ps”是第一个命令行参数，execlp函数并不关心它的值，只是简单地把它传给ps程序，ps程序可以通过main函数的argv[0]取到这个参数。
+
+调用exec后，原来打开的文件描述符仍然是打开的。利用这一点可以实现I/O重定向。
+
+先看一个简单的例子，把标准输入转成大写然后打印到标准输出：
+
+例 upper
+
+```c
+    /* upper.c */
+    #include <stdio.h>
+    int main(void)
+    {
+    int ch;
+    while((ch = getchar()) != EOF) {
+    putchar(toupper(ch));
+    }
+    return 0;
+    }
+```
+
+例 wrapper
+```c
+    /* wrapper.c */
+    #include <unistd.h>
+    #include <stdlib.h>
+    #include <stdio.h>
+    #include <fcntl.h>
+    int main(int argc, char *argv[])
+    {
+    int fd;
+    if (argc != 2) {
+    fputs("usage: wrapper file\n", stderr);
+    exit(1);
+    }
+    fd = open(argv[1], O_RDONLY);
+    if(fd<0) {
+    perror("open");
+    exit(1);
+    }
+    dup2(fd, STDIN_FILENO);
+    close(fd);
+    execl("./upper", "upper", NULL);
+    perror("exec ./upper");
+    exit(1);
+    }
+```
+
+wrapper程序将命令行参数当作文件名打开，将标准输入重定向到这个文件，然后调用exec执行upper程序，这时原来打开的文件描述符仍然是打开的，upper程序只负责从标准输入读入字符转成大写，并不关心标准输入对应的是文件还是终端。运行结果如下：
+
+exec族
+* l 命令行参数列表
+* p 搜素file时使用path变量
+* v 使用命令行参数数组
+* e 使用环境变量数组,不使用进程原有的环境变量，设置新加载程序运行的环境变量
+
+## 8.11 更改用户ID和更改组ID
+
+在UNIX系统中，特权以及访问控制，是基于用户ID和组ID的。当程序需要增加特权，或需要访问当前并不允许访问的资源时，我们需要更换自己的ID或组ID，使得新ID具有合适的特权或访问权限。于此类似，当程序需要降低其特权或阻止对某些资源的访问时，也需要更换用户ID或组ID，新ID不具有相应的特权或访问权限。
+
+一般而言，在设计应用时，我们总试图采用最小特权（least privilege）模型。
+
+可以用setuid函数设置实际用户ID和有效用户ID。于此类似，可以用setgid函数设置实际组ID和有效组ID
+
+```c
+    #include <unistd.h>
+
+    int setuid(uid_t uid);
+    int setgid(gid_t gid);
+```
+若进程具有超级用户特权，则setid函数将实际用户ID、有效用户ID以及保存的设置用户ID设置为uid。
+
+若进程没有超级用户权限，但是uid等于实际用户ID或保存的设置用户ID，则setuid只将有效用户ID设置为uid，不更改实际用户ID和保存的设置用户ID。
+
+如果上面的条件都不满足，则errno设置为EPERM，并返回-1。
+
+## 8.12 解释器文件
+
+所有现今的UNIX都支持解释器文件。这种文件本质是文本文件，其起始的形式是：
+
+\#! pathname[optional-argument]
+
+在感叹号和pathname之间的空格是可选的。最常见的解释器文件以下列行开始：
+
+\#! /bin/sh
+
+pathname通常是绝对路径名，对它不进行什么特殊处理（不使用PATH进行路径搜索）。这种文件的识别是由内核作为exec系统调用处理的一部分完成的。内核调用exec函数的进程实际执行的并不是该解释器文件，二是在该解释器文件第一行所指定的文件。
+
+## 8.13 函数system ##
+
+ISO C定义了system函数，但是其对系统的依赖性很强。
+```c
+	#include <stdlib.h>
+
+	int system(const char *cmdstring);
+```
+如过cmdstring是一个空指针，择仅当命令处理程序可用时，system返回非0值，这一特性可以确定在一个给定的操作系统上是否支持system函数。在UNIX中，system总是可用的。
+
+因为system在其实现中调用了fork、exec和waitpid
+
+1. fork失败或者waitpid返回除了EINTR之外的出错，则system返回-1，并且设置errno以只是错误类型。
+2. 如过exec失败（表示不能执行shell），则其返回值如同shell执行了exit（127）一样。
+3. 否则所有3个函数（fork、exec和waitpid）都成功，那么system的返回值是shell的终止状态，其格式已经在waitpid中说明。
+
+使用system而不是直接使用fork和exec的优点是：system进行了所需的各种出错处理以及各种信号处理。
+
+## 8.14 进程会计
+
+大多数UNIX系统会提供了一个选项以进行进程会计处理。启用该选项后，每当进程结束时，内核就会写一个会计记录。单行的会计记录包含总量较小的二进制数据，一般包括命令名、所使用的CPU总量、用户组ID和组ID、启动时间等。
+
+```c
+    #include <sys/acct.h>
+
+    //acct("/var/log/pacct");
+```
+
+会计记录所需的各个数据都是由内核保存在进程表中，并在一个新进程被创建时初始化（如fork之后再子进程中）。进程中只会产生两个后果。
+
+第一，我们不能获取永远不终止的进程的会计记录。
+
+第二，在会计文件中记录的顺序对应于进程结束的顺序，而不是它们启动的顺序。
+
+## 8.15 用户标识
+
+任意进程都可以得到其实际用户ID和有效用户ID及组ID。但是我们有时希望找到运行该程序用户的登录名。我么可以调用getpwuid(getpid())，但是一个用户有多个登录名，这些登录名又对应着同一个用户ID，又将如何呢？（一个人在口令文件中可以有多个登录项，但是他们的用户ID相同，但登陆的shell不同。）系统通常会记录用户登录时所使用的名字，用getlogin函数可以获取此登录名。
+
+```c
+    #include <unistd.h>
+
+    char *getlogin(void);
+    //返回值：若成功，返回指向登录名字符串的指针；若失败，返回NULL
+```
+如果调用此函数时没有连接到用户登录时所用的终端，则函数会失败。通常称这些进程为守护进程。
+
+## 8.16 进程调度
+
+UNIX系统对于进程提供的只是基于优先级的醋粒度的控制。调度策略和调度优先级是由内核确定的。进程可以通过调整nice值选择以更低优先级运行（通过调整nice值降低它对CPU的占有，因此该进程是“友好的”）。只有特权进程允许提高调度权限。
+
+进程可以通过nice函数获取或更改自己的nice值，使用这个函数，进程只能影响自己的nice值，不能影响其他任何进程的nice值。
+```c
+    #include <unistd.h>
+
+    int nice(int incr);
+```
+
+incr参数被增加到调进程nice值上。如果incr太大，系统直接把它降到最大合法值，不给出提示。类似的如果incr太小，系统也会把它提高到最小化合法值。由于-1是合法的成功返回值，在调用nice函数前需要清除errno，在nice函数返回-1时，需要检查它的值。如果nice调用成功并且返回-1，那么errno仍然为0。如果errno部位0.如果errno部位0，说明nice调用失败。
+
+getpriority函数可以像nice函数那样获取进程nice值，但是getpriority还可以获取一组相关进程的nice值。
+
+```c
+    #include <sys/resource.h>
+
+    int getpriority(int which, id_t who);
+    //返回值：若成功，返回-NZERO~NZERO-1之间的nice值；若出错，返回-1
+```
+which的参数可以取已下三个值之一：PRIO_PROCESS表示进程，PRIO_PGRP表示进程组，PRIO_USER表示用户ID。which参数控制who参数是怎么解释的，who参数选择感兴趣的一个或多个进程。如果who参数为0，表示调用进程、进程组或者用户（取决于which参数的值）。
+
+setpriority函数可用于为进程、进程组和属于特定用户ID的所有进程设置优先级。
+```c
+    #include <sys/resource.h>
+
+    int setpriority(int which, id_t who, int value);
+    //返回值：若成功，返回0；若失败，返回-1
+```
+
+参数which和who与getpriority函数中相同。value加到NZERO上，然后变成新的nice值。
+
+## 8.17 进程时间
+
+在之前说明了我们可以度量的3个时间：墙上时钟时间、用户CPU时间和系统CPU时间。任一进程都可调用times函数获得它自己以及终止子进程的上述值。
+
+```c
+    #include <sys/times.h>
+
+    clock_t times(struct tms *buf);
+    //返回值：若成功，返回流逝时间的墙上时钟时间（以时钟滴答数为单位）；若出错，返回-1
+```
+
+此函数填写由buf指向的tms结构，该结构定义如下：
+```c
+    struct tms{
+        clock_t tms_utime;   /* user CPU time */
+        clock_t tms_stime;   /* system CPU time */
+        clock_t tms_cutime;   /* user CPU time, terminated children */
+        clock_t tms_cstime;   /* system CPU time, terminated children */
+    }
+```
+对于UNIX环境中的高级编程而言，完整地了解UNIX的进程控制是非常重要的。其中必须熟练掌握的只有几个函数——fork，exec系列、_exit、wait和waitpid。很多应用程序都使用这些简单的函数。fork函数也给了我们一个了解竞争条件的机会。
+
+本节说明了system函数和进程会计，这也使我们能进一步了解所有这些进程控制函数。本章还说明了exec函数的另一种变体：解释器文件及它们的工作方式。对各种不同用户ID和组ID（实际、有效和保存的）理解，对编写安全的设置用户ID程序是至关重要的。
+
+在了解进程和子进程的基础上，下一章将进一步说明进程和其他进程的关系——会话和作业控制。

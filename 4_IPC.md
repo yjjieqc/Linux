@@ -2,7 +2,13 @@
 
 每个进程各自有不同的用户地址空间，任何一个进程的全局变量在另一个进程中都看不到，所以进程之间要交换数据必须通过内核，在内核中开辟一块缓冲区，进程1把数据从用户空间拷到内核缓冲区，进程2再从内核缓冲区把数据读走，内核提供的这种机制称为进程间通信（IPC，InterProcess Communication）。
 
-![图4.1 进程间通信](./figures/4-linux-IPC/进程间通信.png "图4.1 进程间通信") 
+<center>
+
+![图4.1 进程间通信](./figures/4-linux-IPC/processcom.png)
+
+"图4.1 进程间通信"s
+
+</center>
 
 ## 4.1  pipe管道
 
@@ -13,7 +19,7 @@
         int pipe(int filedes[2]);
 ```
 
-管道作用于有__血缘关系__的进程之间,通过fork来传递调用pipe函数时在内核中开辟一块缓冲区（称为管道）用于通信，它有一个读端一个写端，然后通过filedes参数传出给用户程序两个文件描述符，filedes[0]指向管道的读端，filedes[1]指向管道的写端（很好记，就像0是标准输入1是标准输出一样）。所以管道在用户程序看起来就像一个打开的文件，通过read(filedes[0]);或者write(filedes[1]);向这个文件读写数据其实是在读写内核缓冲区。pipe函数调用成功返回0，调用失败返回-1。
+管道作用于有 __血缘关系__ 的进程之间,通过fork来传递调用pipe函数时在内核中开辟一块缓冲区（称为管道）用于通信，它有一个读端一个写端，然后通过filedes参数传出给用户程序两个文件描述符，filedes[0]指向管道的读端，filedes[1]指向管道的写端（很好记，就像0是标准输入1是标准输出一样）。所以管道在用户程序看起来就像一个打开的文件，通过read(filedes[0]);或者write(filedes[1]);向这个文件读写数据其实是在读写内核缓冲区。pipe函数调用成功返回0，调用失败返回-1。
         
 开辟了管道之后如何实现两个进程间的通信呢？比如可以按下面的步骤通信。
         
@@ -27,44 +33,42 @@ __子写父读： 关闭子读，关闭父写__
 
 例 pipe管道
 
-```
-        #include <stdlib.h>
-        #include <unistd.h>
-        #define MAXLINE 80
-        int main(void)
-        {
-            int n;
-            int fd[2];
-            pid_t pid;
-            char line[MAXLINE];
-            if (pipe(fd) < 0) {
-                perror("pipe");
-                exit(1);
-            }
-            if ((pid = fork()) < 0) {
-                perror("fork");
-                exit(1);
-                }
-            if (pid > 0) { /* parent */
-                close(fd[0]);
-                write(fd[1], "hello world\n", 12);
-                wait(NULL);
-                } 
-            else { /* child */
-                close(fd[1]);
-                n = read(fd[0], line, MAXLINE);
-                write(STDOUT_FILENO, line, n);
-            }
-            return 0;
+```c
+    #include <stdlib.h>
+    #include <unistd.h>
+    #define MAXLINE 80
+    int main(void)
+    {
+        int n;
+        int fd[2];
+        pid_t pid;
+        char line[MAXLINE];
+        if (pipe(fd) < 0) {
+            perror("pipe");
+            exit(1);
         }
-
+        if ((pid = fork()) < 0) {
+            perror("fork");
+            exit(1);
+            }
+        if (pid > 0) { /* parent */
+            close(fd[0]);
+            write(fd[1], "hello world\n", 12);
+            wait(NULL);
+            } 
+        else { /* child */
+            close(fd[1]);
+            n = read(fd[0], line, MAXLINE);
+            write(STDOUT_FILENO, line, n);
+        }
+        return 0;
+    }
 ```
-
 总结
 
 ls -l | grep "name"     **使用示例**
 
-pipe用于有血缘关系的进城之间，通过fork来传递      **fork(fd[2])**
+pipe用于有血缘关系的进程之间，通过fork来传递      **fork(fd[2])**
 
 文件描述符在父子进程之间传递，但相同的文件描述符对应唯一的file结构体（公用读写指针位置）
 
@@ -96,18 +100,17 @@ pipe用于有血缘关系的进城之间，通过fork来传递      **fork(fd[2]
 
 fpathconf(int fd, int name)测试管道缓冲区大小，_PC_PIPE_
 
-
 ## 4.2  fifo有名管道
 
 创建一个有名管道，解决无血缘进程之间的通信，fifo：
 
 mkfifo 既有命令也有函数
 
-
+```c
     #include <sys/types.h>
     #include <sys/stat.h>
     int mkfifo(const char *pathname, mode_t mode);
-
+```
 
 ## 4.3  内存共享映射
 
@@ -115,12 +118,13 @@ mkfifo 既有命令也有函数
 
 mmap可以把磁盘文件的一部分直接映射到内存，这样文件中的位置直接就有对应的内存地址，对文件的读写可以直接用指针来做而不需要read/write函数。
 
+```c
     #include <sys/mman.h>
     void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
     int munmap(void *addr, size_t length);
+```
 
-
-如果addr参数为NULL，内核会自己在进程地址空间中选择合适的地址建立映射。如果addr不是NULL，则给内核一个提示，应该从什么地址开始映射，内核会选择addr之上的某个合适的地址开始映射。建立映射后，真正的映射首地址通过返回值可以得到。len参数是需要映射的那一部分文件的长度。off参数是从文件的什么位置开始映射，必须是页大小的整数倍（在32位体系统结构上通常是4K）。filedes是代表该文件的描述符。
+如果addr参数为NULL，内核会自己在进程地址空间中选择合适的地址建立映射。如果addr不是NULL，则给内核一个提示，应该从什么地址开始映射，内核会选择addr之上的某个合适的地址开始映射。建立映射后，真正的映射首地址通过返回值可以得到。len参数是需要映射的那一部分文件的长度。off参数是从文件的什么位置开始映射，必须是页大小的整数倍（在32位系统结构上通常是4K）。filedes是代表该文件的描述符。
 
 prot参数有四种取值：
 
@@ -132,35 +136,35 @@ prot参数有四种取值：
 flag参数有很多种取值，这里只讲两种，其它取值可查看mmap(2)
 * MAP_SHARED多个进程对同一个文件的映射是共享的，一个进程对映射的内存做了修改，另一个进程也会看到这种变化。
 * MAP_PRIVATE多个进程对同一个文件的映射不是共享的，一个进程对映射的内存做了修改，另一个进程并不会看到这种变化，也不会真的写到文件中去。
+
 如果mmap成功则返回映射首地址，如果出错则返回常数MAP_FAILED。当进程终止时，该进程的映射内存会自动解除，也可以调用munmap解除映射。munmap成功返回0，出错返回-1。
 
 下面做一个简单的实验
 
 使用mmap映射
-
-
+```c
     #include <stdlib.h>
     #include <sys/mman.h>
     #include <fcntl.h>
     int main(void)
     {
-    int *p;
-    int fd = open("hello", O_RDWR);
-    if (fd < 0) {
-    perror("open hello");
-    exit(1);
+        int *p;
+        int fd = open("hello", O_RDWR);
+        if (fd < 0) {
+            perror("open hello");
+        exit(1);
     }
     p = mmap(NULL, 6, PROT_WRITE, MAP_SHARED, fd, 0);
     if (p == MAP_FAILED) {
-    perror("mmap");
-    exit(1);
+        perror("mmap");
+        exit(1);
     }
     close(fd);
     p[0] = 0x30313233;
     munmap(p, 6);
     return 0;
     }
-
+```
 
 * 用于进程间通信时，一般设计成结构体，来传输通信的数据
 * 进程间通信的文件，应该设计成临时文件
@@ -169,100 +173,98 @@ flag参数有很多种取值，这里只讲两种，其它取值可查看mmap(2)
 ### 4.3.2  进程间共享通信
 
 写进程实现
-
-```
-        #include <stdio.h>
-        #include <stdlib.h>
-        #include <fcntl.h>
-        #include <sys/stat.h>
-        #include <sys/types.h>
-        #include <unistd.h>
-        #include <sys/mman.h>
-        #include <fcntl.h>
-        
-        #define MAPLEN 0x1000
-         
-        void sys_err(char* str, int exitno){
-        	perror("str");
-        	exit(exitno);
-        }
-        
-        int main(int argc, char * argv[]){
-        	char *mm;
-        	int fd, i = 0;
-        	if(argc <2){
-        		printf("./mmap_w filename\n");
-        		exit(1);
-        	}
-        	fd = open(argv[1], O_RDWR | O_CREAT, 0777);
-        	if(fd < 0){
-        		sys_err("open", 1);
-        	}
-        
-        	if(lseek(fd, MAPLEN-1, SEEK_SET)<0)
-        		sys_err("lseek", 3);
-        	if(write(fd, "\0", 1)<0)
-        		sys_err("write", 4);
-        
-        	mm = mmap(NULL, MAPLEN, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-        	close(fd);
-        	if(mm == MAP_FAILED)
-        		sys_err("mmap", 2);
-        	while(1){
-        		sprintf(mm, "hello %d", i++);
-        		sleep(1);
-        	}
-        	munmap(mm, MAPLEN);
-        	return 0;
-        }
+```c
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <fcntl.h>
+    #include <sys/stat.h>
+    #include <sys/types.h>
+    #include <unistd.h>
+    #include <sys/mman.h>
+    #include <fcntl.h>
+    
+    #define MAPLEN 0x1000
+     
+    void sys_err(char* str, int exitno){
+    	perror("str");
+    	exit(exitno);
+    }
+    
+    int main(int argc, char * argv[]){
+    	char *mm;
+    	int fd, i = 0;
+    	if(argc <2){
+    		printf("./mmap_w filename\n");
+    		exit(1);
+    	}
+    	fd = open(argv[1], O_RDWR | O_CREAT, 0777);
+    	if(fd < 0){
+    		sys_err("open", 1);
+    	}
+    
+    	if(lseek(fd, MAPLEN-1, SEEK_SET)<0)
+    		sys_err("lseek", 3);
+    	if(write(fd, "\0", 1)<0)
+    		sys_err("write", 4);
+    
+    	mm = mmap(NULL, MAPLEN, PROT_READ | PROT_WRITE,MAP_SHARED, fd, 0);
+    	close(fd);
+    	if(mm == MAP_FAILED)
+    		sys_err("mmap", 2);
+    	while(1){
+    		sprintf(mm, "hello %d", i++);
+    		sleep(1);
+    	}
+    	munmap(mm, MAPLEN);
+    	return 0;
+    }
 ```
 
 读进程实现
-
+```c
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <fcntl.h>
+    #include <sys/stat.h>
+    #include <sys/types.h>
+    #include <unistd.h>
+    #include <sys/mman.h>
+    #include <fcntl.h>
+    
+    #define MAPLEN 0x1000
+     
+    void sys_err(char* str, int exitno){
+    	perror("str");
+    	exit(exitno);
+    }
+    
+    int main(int argc, char * argv[]){
+    	char *mm;
+    	int fd, i = 0;
+    	if(argc <2){
+    		printf("./mmap_w filename\n");
+    		exit(1);
+    	}
+    	fd = open(argv[1], O_RDWR, 0777);
+    	if(fd < 0){
+    		sys_err("open", 1);
+    	}
+    
+    	mm = mmap(NULL, MAPLEN, PROT_READ | PROT_WRITE,MAP_SHARED, fd, 0);
+    	close(fd);
+    	if(mm == MAP_FAILED)
+    		sys_err("mmap", 2);
+    	while(1){
+    		printf("%s\n", mm);
+    		sleep(1);
+    	}
+    	munmap(mm, MAPLEN);
+    	return 0;
+    }
 ```
-        #include <stdio.h>
-        #include <stdlib.h>
-        #include <fcntl.h>
-        #include <sys/stat.h>
-        #include <sys/types.h>
-        #include <unistd.h>
-        #include <sys/mman.h>
-        #include <fcntl.h>
-        
-        #define MAPLEN 0x1000
-         
-        void sys_err(char* str, int exitno){
-        	perror("str");
-        	exit(exitno);
-        }
-        
-        int main(int argc, char * argv[]){
-        	char *mm;
-        	int fd, i = 0;
-        	if(argc <2){
-        		printf("./mmap_w filename\n");
-        		exit(1);
-        	}
-        	fd = open(argv[1], O_RDWR, 0777);
-        	if(fd < 0){
-        		sys_err("open", 1);
-        	}
-        
-        	mm = mmap(NULL, MAPLEN, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-        	close(fd);
-        	if(mm == MAP_FAILED)
-        		sys_err("mmap", 2);
-        	while(1){
-        		printf("%s\n", mm);
-        		sleep(1);
-        	}
-        	munmap(mm, MAPLEN);
-        	return 0;
-        }
-```
 
-*用于进程间通信时，一般设计成结构体，用来传输通信数据
-*进程间通信的文件，应该设计成临时文件
+* 用于进程间通信时，一般设计成结构体，用来传输通信数据
+* 进程间通信的文件，应该设计成临时文件
 
 **open和mmap的读写权限要匹配**
 
