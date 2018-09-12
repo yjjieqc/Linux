@@ -10,7 +10,7 @@
 	
 	long sysconf(int name);
 	long pathconf(const char* pathname, int name);
-	log fpathconf(int fd, int name);
+	long fpathconf(int fd, int name);
 
 
 后面连个函数的区别在于：一个用路径名作为参数，一个用文件描述符作为参数。
