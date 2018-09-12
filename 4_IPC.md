@@ -103,11 +103,11 @@ fpathconf(int fd, int name)测试管道缓冲区大小，_PC_PIPE_
 
 mkfifo 既有命令也有函数
 
-```
-        #include <sys/types.h>
-        #include <sys/stat.h>
-        int mkfifo(const char *pathname, mode_t mode);
-```
+
+    #include <sys/types.h>
+    #include <sys/stat.h>
+    int mkfifo(const char *pathname, mode_t mode);
+
 
 ## 4.3  内存共享映射
 
@@ -115,11 +115,11 @@ mkfifo 既有命令也有函数
 
 mmap可以把磁盘文件的一部分直接映射到内存，这样文件中的位置直接就有对应的内存地址，对文件的读写可以直接用指针来做而不需要read/write函数。
 
-```
     #include <sys/mman.h>
     void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
     int munmap(void *addr, size_t length);
-```
+
+
 如果addr参数为NULL，内核会自己在进程地址空间中选择合适的地址建立映射。如果addr不是NULL，则给内核一个提示，应该从什么地址开始映射，内核会选择addr之上的某个合适的地址开始映射。建立映射后，真正的映射首地址通过返回值可以得到。len参数是需要映射的那一部分文件的长度。off参数是从文件的什么位置开始映射，必须是页大小的整数倍（在32位体系统结构上通常是4K）。filedes是代表该文件的描述符。
 
 prot参数有四种取值：
@@ -138,29 +138,29 @@ flag参数有很多种取值，这里只讲两种，其它取值可查看mmap(2)
 
 使用mmap映射
 
-```
-        #include <stdlib.h>
-        #include <sys/mman.h>
-        #include <fcntl.h>
-        int main(void)
-        {
-            int *p;
-            int fd = open("hello", O_RDWR);
-            if (fd < 0) {
-                perror("open hello");
-                exit(1);
-            }
-            p = mmap(NULL, 6, PROT_WRITE, MAP_SHARED, fd, 0);
-            if (p == MAP_FAILED) {
-                perror("mmap");
-                exit(1);
-            }
-            close(fd);
-            p[0] = 0x30313233;
-            munmap(p, 6);
-            return 0;
-        }
-```
+
+    #include <stdlib.h>
+    #include <sys/mman.h>
+    #include <fcntl.h>
+    int main(void)
+    {
+    int *p;
+    int fd = open("hello", O_RDWR);
+    if (fd < 0) {
+    perror("open hello");
+    exit(1);
+    }
+    p = mmap(NULL, 6, PROT_WRITE, MAP_SHARED, fd, 0);
+    if (p == MAP_FAILED) {
+    perror("mmap");
+    exit(1);
+    }
+    close(fd);
+    p[0] = 0x30313233;
+    munmap(p, 6);
+    return 0;
+    }
+
 
 * 用于进程间通信时，一般设计成结构体，来传输通信的数据
 * 进程间通信的文件，应该设计成临时文件
