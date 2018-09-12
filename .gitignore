@@ -2,3 +2,5 @@
 *.[oa]
 *.out
 
+#test folder
+tmp/

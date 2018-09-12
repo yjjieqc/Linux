@@ -8,7 +8,7 @@
 
 gcc -fPIC -c a.c
 gcc -fPIC -c b.c
-gcc -shared -Wl -o libmyab.so a.o b.o
+gcc -shared -Wl, -o libmyab.so a.o b.o
 
 ### 就业班使用
 

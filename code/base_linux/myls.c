@@ -2,10 +2,11 @@
 #include <dirent.h>
 #include "ourhdr.h"
 
-int main(int argc, char * argv[]){
-	DIR	*dp;
-	struct dirent	*dirp;
-	if(argc != 2)
+int main(int argc, char *argv[])
+{
+	DIR *dp;
+	struct dirent *dirp;
+	if (argc != 2)
 		err_quit("a single argument (the directory name) is required");
 
 	if((dp=opendir(argv[1]) == NULL)
