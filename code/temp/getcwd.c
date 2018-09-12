@@ -3,7 +3,9 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <sys/types.h>
-
+#ifndef size_t 
+typedef unsigned int size_t;
+#endif
 int main(void){
     char *ptr;
     size_t size = 256;
@@ -14,5 +16,7 @@ int main(void){
     perror("getced failed");
     printf("cwd = %s\n", ptr);
     free(ptr);
+    int a;
+    scanf("%d", &a);
     exit(0);
 }

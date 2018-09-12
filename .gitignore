@@ -2,7 +2,9 @@
 *.[oa]
 *.out
 *.code-workspace
+*.exe
 
 #test folder
 tmp/
 .vscode/
+code/temp/
