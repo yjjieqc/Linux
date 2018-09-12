@@ -226,6 +226,7 @@ HOME
         事实上，只有execve()是真正的系统调用，其它五个函数最终都调用execve()，所以execve()在man手册第2节，其它函数在man手册第3节。这些函数之间的关系如下图所示。
 
         一个完整的例子：
+```
         #include <unistd.h>
         #include <stdlib.h>
         int main(void)
@@ -234,12 +235,14 @@ HOME
         perror("exec ps");
         exit(1);
         }
+```
 
         由于exec函数只有错误返回值，只要返回了一定是出错了，所以不需要判断它的返回值，直接在后面调用perror即可。注意在调用execlp时传了两个“ps”参数，第一个“ps”是程序名，execlp函数要在PATH环境变量中找到这个程序并执行它，而第二个“ps”是第一个命令行参数，execlp函数并不关心它的值，只是简单地把它传给ps程序，ps程序可以通过main函数的argv[0]取到这个参数。
         调用exec后，原来打开的文件描述符仍然是打开的。利用这一点可以实现I/O重定向。
         先看一个简单的例子，把标准输入转成大写然后打印到标准输出：
         例 upper
 
+```
         /* upper.c */
         #include <stdio.h>
         int main(void)
@@ -276,7 +279,7 @@ HOME
         perror("exec ./upper");
         exit(1);
         }
-
+```
 
         wrapper程序将命令行参数当作文件名打开，将标准输入重定向到这个文件，然后调用exec执行upper程序，这时原来打开的文件描述符仍然是打开的，upper程序只负责从标准输入读入字符转成大写，并不关心标准输入对应的是文件还是终端。运行结果如下：
 
