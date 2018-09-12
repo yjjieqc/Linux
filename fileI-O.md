@@ -445,6 +445,8 @@ timespec结构体按照秒和纳秒定义了时间，至少包括以下两个字
 stat里面时间辨析：
     atime(最近访问时间): mtime(最近更改时间):指最近修改文件内容的时间 ctime(最近改动时间):指最近改动Inode的时间
 
+    Inode修改操作包括更改文件的访问权限、更改用户ID，更改链接数等，它们并不直接修改文件内容。
+
 文件访问和目录权限
 
 |st_mode屏蔽字|含义|
@@ -571,9 +573,9 @@ fchownat在以下两种情况下是相同的：一种是pathname参数为绝对�
 ### unlink
 
 ```c
-    #include <unistd.h>
+        #include <unistd.h>
 
-    int unlink(const char *pathname);
+        int unlink(const char *pathname);
 ```
 
 1. 如果是符号链接,删除符号链接
@@ -589,96 +591,159 @@ fchownat在以下两种情况下是相同的：一种是pathname参数为绝对�
         int remove(const char *pathname);
 ```
 
-### symlink
-
-```C
-    int symlink(const char *target, const char *linkpath);
-```
-### readlink
-
-    读符号链接所指向的文件名，不读文件内容。
-
-```c
-    #include <unistd.h>
-
-    ssize_t readlink(const char *pathname, char *buf, size_t bufsiz);
-```
-
 ## 函数rename和renameat
 
 文件或者目录可以用rename函数或者renameat函数进行重命名。
 
 ```c
-    #include <stdio.h>
+        #include <stdio.h>
 
-    int rename(const char *oldname, const char *newname);
-    int renameat(int oldfd, const char *oldname, int newfd, const char *newname);
+        int rename(const char *oldname, const char *newname);
+        int renameat(int oldfd, const char *oldname, int newfd, const char *newname);
 ```
 
 根据oldname是指文件、目录还是链接，有几种情况需要说明。
 
-## chdir
+1. 如果oldname指的是一个文件而不是目录，那么为该文件或者符号链接重命名。在这种情况下，如果rename已经存在，而且不是一个目录，则先将该目录想删除后将oldname命名成newname。对包含oldname的目录以及包含newname的目录，调用进程必须有写权限，因为将更改这两个目录。
+
+
+
+
+符号链接是对一个文件的间接指针，但是与之前所述的硬链接有所不同，硬链接直接指向文件的i节点。引入符号链接的原因是为了避开硬链接的某些限制。
+
+* 硬链接通常要求链接和文件在同一文件系统中。
+* 只有超级用户才能创建指向目录的硬链接。
+
+### 函数symlink和symlinkat
+
+```C
+        #include <unistd.h>
+        int symlink(const char *actualpath, const char *sympath);
+        int symlinkat(const char *actualpath, int fd, const char *sympath);
+        //两个函数的返回值，成功返回0；若出错，返回-1
+```
+
+函数创建了一个指向actualpath的新目录项sympath。在创建此符号链接时，并不要求actualpath已经存在。并且，actualpath和sympath并不需要在同一文件系统中。
+
+因为open函数跟随符号链接，所以需要有一种方法来打开链接本身，并读取链接中的名字。readlink和readlinkat函数提供这种功能。
+
+### readlink
+
+    读符号链接所指向的文件名，不读文件内容。
 
 ```c
-    #include <unistd.h>
+        #include <unistd.h>
 
-    int chdir(const char *path);
-    int fchdir(int fd);
-```
-    改变当前进程的工作目录
-
-## 2.10  getcwd
-
-```
-    #include <unistd.h>
-
-    char *getcwd(char *buf, size_t size);
-```
-    获取当前进程工作目录
-
-## 2.11  pathconf
-
-```
-    #include <unistd.h>
-
-    long fpathconf(int fd, int name);
-    long pathconf(const char *path, int name);
+        ssize_t readlink(const char *restrict pathname, char *restrict buf, size_t bufsiz);
+        ssize_t readlinkat(int fd, const char *restrict pathname, char *restrict buf, size_t bufsiz);
+        //两个函数的返回值：若成功，返回读取的字节数；若失败，返回-1
 ```
 
-## 2.12  目录操作
+两个函数组合了open、read和close的所有操作。如果函数成功执行，则返回读入buf的字节数。在buf中返回的符号链接内容不已null字节终止。
 
-### 2.12.1  mkdir
+## 2.9 函数futimens、utimensat和utimes
 
+一个文件的访问和修改时间可以用以下几个函数更改。futimens和utimensat可以指定纳秒级精度的时间戳。用到的数据结构是与stat函数族相同的timespec结构。
+
+```c
+        #include <sys/stat.h>
+
+        int futimens(int fd, const struct timespec times[2]);
+        int utimensat(int fd, const char *path, const struct timespec times[2], int flag);
+```
+times数组第一个元素表示最后访问时间，第二个元素包含修改时间，不足秒的部分用纳秒表示。
+
+```c
+        #include <sys/time.h>
+
+        int utimens(const char *path, const struct timeval times[2]);
+```
+
+utimes函数对路径名进行操作。times参数指向包含两个时间戳元素的数组指针，两个时间戳都是用秒和微秒表示的。
+
+```c
+        strcut tiemval{
+            time_t  tv_sec; /*seconds*/
+            long`   tv_usec;/*microseconds*/
+        }
+```
+注意我们不能对状态更改时间st_ctim(inode最近被修改的时间)指定一个值，因为在调用utimes的时候，此字段会被自动更新。
+
+## 2.10  目录操作函数mkdir、mkdirat和rmdir
+
+```c
        #include <sys/stat.h>
        #include <sys/types.h>
 
        int mkdir(const char *pathname, mode_t mode);
+       int mkdirat(int fd, const char *pathname, mode_t mode);
+       //两个函数返回值：若成功，返回0；若失败，返回-1
+```
+这两个函数创建一个新目录。其中，`.`和`..`目录项是自动创建的。所制定的文件访问权限mode由进程的文件模式创建屏蔽字修改。常见的错误是指定与文件相同的mode（只指定读、写权限）。但是对于目录通常至少要设置一个执行权限位，以允许访问目录中的文件名。
 
-### 2.12.2  rmdir
+用rmdir函数可以删除一个空目录。空目录是指只包含`.`和`..`这两项的目录。
 
+```c
        #include <unistd.h>
 
        int rmdir(const char *pathname);
+```
 
-### 2.12.3  opendir/fdopendir
+## 2.11  opendir/fdopendir
 
+```c
        #include <sys/types.h>
        #include <dirent.h>
 
        DIR *opendir(const char *name);
        DIR *fdopendir(int fd);
 
-### 2.12.4  readdir
-
-       #include <dirent.h>
-
        struct dirent *readdir(DIR *dirp);//返回一个纪录项指针
 
-                  struct dirent {
-                       ino_t          d_ino;       /* inode number */
-                       off_t          d_off;       /* not an offset; see NOTES */
-                       unsigned short d_reclen;    /* length of this record */
-                       unsigned char  d_type;      /* type of file; not supported
-                                                      by all filesystem types */
-                       char           d_name[256]; /* filename */
-                   };
+       struct dirent {
+            ino_t          d_ino;       /* inode number */  //important
+            off_t          d_off;       /* not an offset; see NOTES */
+            unsigned short d_reclen;    /* length of this record */
+            unsigned char  d_type;      /* type of file; not supported
+                                        by all filesystem types */
+            char           d_name[256]; /* filename */      //important
+        };
+
+        void rewinddir(DIR *dp);
+        int closedir(DIR *dp);
+
+        long telldir(DIR *dp);
+        void seekdir(DIR *dp, long loc);    /*这两个函数并不是基本的POSIX.1标准组成部分*/
+```
+
+fdopendir提供一种方法将打开的文件描述符转换为目录处理函数所需要的DIR结构。由opendir和fdopendir返回的DIR结构指针可由其他5个函数调用。
+
+遍历层次结构的函数ftw(file tree walk)
+
+## 2.12 函数chdir、fchdir和getcwd
+
+```c
+    #include <unistd.h>
+
+    int chdir(const char *pathname);
+    int fchdir(int fd);
+```
+改变当前进程的工作目录,每个进程都有一个当前工作目录，此目录是搜索所有相对路径的起点。当前工作目录时进程的一个属性，而起始目录是登录名的一个属性。
+
+```c
+    #include <unistd.h>
+
+    char *getcwd(char *buf, size_t size);
+```
+获取当前进程工作目录,它从当前工作目录`.`开始，用`..`找到其上一级目录，然后读其目录项，直到该目录项中的i节点编号与工作目录得i节点编号相同，这样找到了对应的文件名。按照这种方法逐层上移，直到遇到跟，就得到了当前目录的绝对路径。必须向次函数传递两个参数，一个是缓冲区地址buf，另一个是缓冲区长度size（以字节为单位）。缓冲区必须有足够的长度以容纳绝对路径加上一各终止null字节，否则出错。
+
+应当注意，chdir跟随符号链接。
+
+## 2.13  pathconf
+
+```c
+    #include <unistd.h>
+
+    long fpathconf(int fd, int name);
+    long pathconf(const char *path, int name);
+```
