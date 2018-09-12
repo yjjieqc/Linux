@@ -5,19 +5,19 @@
 ### 1.1.1 函数sysconf、pathconf和fpathconf
 
 函数原型
+```c
+    #include <unistd.h>
 
-	#include <unistd.h>
-	
-	long sysconf(int name);
-	long pathconf(const char* pathname, int name);
-	long fpathconf(int fd, int name);
-
+    long sysconf(int name);
+    long pathconf(const char* pathname, int name);
+    long fpathconf(int fd, int name);
+```
 
 后面连个函数的区别在于：一个用路径名作为参数，一个用文件描述符作为参数。
 
-如果name不是一个合适的常量，三个函数都会返回-1，并把errno设置为EINVAL。
+如果`name`不是一个合适的常量，三个函数都会返回-1，并把`errno`设置为EINVAL。
 
-有些name会返回一个变量值（返回值≥0）或者提示该值是不确定的。不确定的值通过-1来体现，但是不修改errno的值。
+有些name会返回一个变量值（返回值≥0）或者提示该值是不确定的。不确定的值通过-1来体现，但是不修改`errno`的值。
 
 ### 1.1.2  I/O缓冲区
 
@@ -447,6 +447,7 @@ timespec结构体按照秒和纳秒定义了时间，至少包括以下两个字
         long    tv_nsec;
 ```
 stat里面时间辨析：
+
     atime(最近访问时间): mtime(最近更改时间):指最近修改文件内容的时间 ctime(最近改动时间):指最近改动Inode的时间
 
     Inode修改操作包括更改文件的访问权限、更改用户ID，更改链接数等，它们并不直接修改文件内容。
@@ -535,7 +536,7 @@ fchownat在以下两种情况下是相同的：一种是pathname参数为绝对�
 
 ## 2.7 文件截断
 
-优势我们需要在文件尾端处截去一些数据缩短文件。讲一个文件长度截断为0是一个特例，在打开文件的时候用O_TRUNC标志可以做到这一点。为了截断文件可以调用函数`truncate`和`ftruncate`。
+有时我们需要在文件尾端处截去一些数据缩短文件。将一个文件长度截断为0是一个特例，在打开文件的时候用O_TRUNC标志可以做到这一点。为了截断文件可以调用函数`truncate`和`ftruncate`。
 
 ```c
         #include <unistd.h>

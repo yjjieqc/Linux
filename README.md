@@ -1,3 +1,5 @@
 # Linux #
 
-Linux环境变成学习资料总结
+《UNIX/Linux 环境高级编程》学习笔记
+
+开坑：deep into the Linux kernel
