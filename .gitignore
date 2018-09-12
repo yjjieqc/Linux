@@ -1,6 +1,7 @@
 #object file
 *.[oa]
 *.out
+*.code-workspace
 
 #test folder
 tmp/
